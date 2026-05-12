@@ -1,7 +1,17 @@
 // Large swaths taken from https://github.com/zwade/manus-dei/blob/master/client/src/components/ui/styles.tsx
 // License MIT
 
-import { Align, BoxSizing, Edge, FlexDirection, Gutter, Justify, Node as YogaNode, PositionType } from "yoga-layout";
+import {
+    Align,
+    BoxSizing,
+    Edge,
+    FlexDirection,
+    Gutter,
+    Justify,
+    Node as YogaNode,
+    PositionType,
+    Wrap,
+} from "yoga-layout";
 
 export type StyleRecord = Record<string, string>;
 export type Style = string;
@@ -190,6 +200,16 @@ export const alignItems = (val: string | undefined): Align => {
     );
 };
 
+export const flexWrap = (val: string | undefined): Wrap => {
+    return (
+        {
+            nowrap: Wrap.NoWrap,
+            wrap: Wrap.Wrap,
+            "wrap-reverse": Wrap.WrapReverse,
+        }[val || ""] ?? Wrap.NoWrap
+    );
+};
+
 export const positionType = (val: string | undefined) => {
     return (
         {
@@ -284,6 +304,7 @@ export const applyStyles = (node: YogaNode, styles: StyleRecord) => {
     node.setFlexBasis(measureWithAuto(styles["flexBasis"]));
 
     node.setFlexDirection(flexDirection(styles["flexDirection"]));
+    node.setFlexWrap(flexWrap(styles["flexWrap"]));
     node.setJustifyContent(justifyContent(styles["justifyContent"]));
     node.setAlignItems(alignItems(styles["alignItems"]));
 

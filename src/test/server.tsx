@@ -30,7 +30,6 @@ export const startServer = async (port: number) => {
                     columns = info.cols;
                     rows = info.rows;
                     resizeListeners.forEach((listener) => listener());
-                    accept();
                 });
 
                 session.on("shell", (accept, reject) => {

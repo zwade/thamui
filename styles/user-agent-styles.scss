@@ -1,16 +1,12 @@
 button {
-    border: 1px solid #F0F0FF;
-    border-radius: 1px;
     color: #F0F0FF;
-    padding: 0px 1px;
+    padding: 0px 2px;
 
     &:hover {
-        border: 1px solid #B0B0D0;
         color: #B0B0D0;
     }
 
     &:active {
-        border: 1px solid #9898B0;
         color: #9898B0;
     }
 }
@@ -23,6 +19,16 @@ input {
 
     &:focus {
         border: 1px solid #9898B0;
-        color: #9898B0;
+    }
+}
+
+textarea {
+    border: 1px solid #F0F0FF;
+    color: #F0F0FF;
+    min-height: 3px;
+    min-width: 16px;
+
+    &:focus {
+        border: 1px solid #9898B0;
     }
 }

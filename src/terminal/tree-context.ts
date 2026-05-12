@@ -39,6 +39,7 @@ export const decodeKeyEvent = (raw: Buffer): KeyEvent | null => {
                 0x44: "ArrowLeft",
                 0x48: "Home",
                 0x46: "End",
+                0x5a: "Shift+Tab",
             };
 
             const key = named[final];
@@ -107,6 +108,39 @@ export class TreeContext {
         }
     }
 
+    public focusNext(reverse: boolean = false): boolean {
+        const selectable: TerminalContent[] = [];
+        this.#collectSelectable(this.root, selectable);
+
+        if (selectable.length === 0) {
+            return false;
+        }
+
+        const currentIdx = this.focused ? selectable.indexOf(this.focused) : -1;
+        const nextIdx = reverse
+            ? currentIdx <= 0
+                ? selectable.length - 1
+                : currentIdx - 1
+            : (currentIdx + 1) % selectable.length;
+
+        this.claim(selectable[nextIdx]);
+        return true;
+    }
+
+    #collectSelectable(node: TerminalNode, out: TerminalContent[]) {
+        if (!("children" in node)) {
+            return;
+        }
+
+        if (node.isSelectable) {
+            out.push(node);
+        }
+
+        for (const child of node.children) {
+            this.#collectSelectable(child, out);
+        }
+    }
+
     public dispatchTerminalSequence(sequence: Buffer): { handled: boolean; dirty: boolean } {
         if (isMouseSequence(sequence)) {
             return this.dispatchMouseSequence(sequence);
@@ -130,6 +164,14 @@ export class TreeContext {
             }
 
             target = target.parent;
+        }
+
+        if (event.key === "Tab" && !event.ctrl && !event.alt) {
+            return { handled: this.focusNext(false), dirty: true };
+        }
+
+        if (event.key === "Shift+Tab" && !event.ctrl && !event.alt) {
+            return { handled: this.focusNext(true), dirty: true };
         }
 
         return { handled: false, dirty: false };

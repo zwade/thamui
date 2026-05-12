@@ -1,18 +1,84 @@
-.root {
-    flex-direction: row;
+.page {
     width: 100%;
     height: 100%;
+    background-color: #1a1a2e;
     justify-content: center;
     align-items: center;
-    background-color: black;
+}
 
-    .btn {
-        background-color: blue;
-        color: white;
-        border-radius: 0.25em;
+.login-card {
+    width: 44;
+    flex-direction: column;
+    background-color: #2a2a44;
+    padding: 1 3;
+    gap: 1;
+
+    .title {
+        color: #f5f5fa;
+    }
+
+    .subtitle {
+        color: #8a8aa8;
+    }
+
+    .field {
+        flex-direction: column;
+    }
+
+    .label {
+        color: #b0b0c8;
+    }
+
+    .input {
+        background-color: #14142a;
+        color: #f5f5fa;
+        padding: 0 1;
+        height: 1;
+        width: 100%;
 
         &:focus {
-            background-color: green;
+            background-color: #0a0a18;
+            color: #ffffff;
         }
+    }
+
+    .actions {
+        flex-direction: row;
+        justify-content: flex-end;
+        gap: 1;
+    }
+
+    .ghost {
+        background-color: #2a2a44;
+        color: #b0b0c8;
+        padding: 0 2;
+
+        &:hover {
+            color: #f5f5fa;
+        }
+
+        &:focus {
+            color: #f5f5fa;
+            background-color: #3a3a58;
+        }
+    }
+
+    .submit {
+        background-color: #5566cc;
+        color: #ffffff;
+        padding: 0 2;
+
+        &:hover {
+            background-color: #6677dd;
+        }
+
+        &:focus {
+            background-color: #7788ee;
+        }
+    }
+
+    .status {
+        color: #ffaa66;
+        height: 1;
     }
 }

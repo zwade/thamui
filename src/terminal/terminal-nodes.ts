@@ -1,7 +1,7 @@
 import { assert } from "console";
 // import { F, HTContentNode, HTTextNode } from "effectual";
 // import { HTCSSStyleDeclaration } from "effectual/lib/reconciler/src/hydration-target.mjs";
-import Yoga, { Edge, Node as YogaNode } from "yoga-layout";
+import Yoga, { Edge, MeasureFunction, MeasureMode, Node as YogaNode } from "yoga-layout";
 
 import { Selector } from "../styles/selector.js";
 import { applyStyles } from "../styles/style-parsers.js";
@@ -90,6 +90,15 @@ export interface ComputedPosition {
 export class YogaBase {
     #yogaNode: YogaNode | null = null;
     #computedPosition: ComputedPosition | null = null;
+    #measureFunc?: MeasureFunction;
+
+    protected set measureFunc(func: MeasureFunction) {
+        this.#measureFunc = func;
+
+        if (this.#yogaNode) {
+            this.#yogaNode.setMeasureFunc(func);
+        }
+    }
 
     public allocateYoga(): YogaNode {
         if (this.#yogaNode) {
@@ -98,6 +107,10 @@ export class YogaBase {
 
         const yogaNode = Yoga.Node.create();
         this.#yogaNode = yogaNode;
+
+        if (this.#measureFunc) {
+            yogaNode.setMeasureFunc(this.#measureFunc);
+        }
 
         return yogaNode;
     }
@@ -480,17 +493,107 @@ export class TerminalContent extends YogaBase implements Drawable {
     }
 }
 
+const wrapWords = (text: string, width: number | null): string[] => {
+    if (text.length === 0) {
+        return [];
+    }
+
+    if (width === null) {
+        return text.split(/\n/g);
+    }
+
+    const lines: string[] = [];
+
+    for (const baseLine of text.split(/\n+/g)) {
+        let line = "";
+
+        for (const token of baseLine.split(/(\s+)/)) {
+            if (token.length === 0) {
+                continue;
+            }
+
+            if (line.length + token.length <= width) {
+                line += token;
+                continue;
+            }
+
+            if (line.length > 0) {
+                lines.push(line);
+                line = "";
+            }
+
+            if (/^\s+$/.test(token)) {
+                continue;
+            }
+
+            if (token.length > width) {
+                let rest = token;
+                while (rest.length > width) {
+                    lines.push(rest.slice(0, width));
+                    rest = rest.slice(width);
+                }
+
+                line = rest;
+            } else {
+                line = token;
+            }
+        }
+
+        if (line.length > 0) {
+            lines.push(line);
+        }
+    }
+
+    return lines;
+};
+
 export class TerminalText extends YogaBase implements Drawable {
     public nextSibling: TerminalNode | null = null;
     public parent: TerminalContent | null = null;
     public treeContext: TreeContext | null = null;
-    public textContent: string | null;
 
     protected parentStyles: Styles.LocalStyleData | null = null;
 
+    #textContent: string | null;
+
+    public get textContent(): string | null {
+        return this.#textContent;
+    }
+
+    public set textContent(value: string | null) {
+        if (value === this.#textContent) {
+            return;
+        }
+
+        this.#textContent = value;
+        this.allocateYoga().markDirty();
+    }
+
     constructor(textContent: string) {
         super();
-        this.textContent = textContent;
+        this.#textContent = textContent;
+
+        this.measureFunc = (width, widthMode) => {
+            const text = this.#textContent ?? "";
+            const natural = text.length;
+
+            if (natural === 0) {
+                return { width: 0, height: 0 };
+            }
+
+            if (widthMode === MeasureMode.Undefined) {
+                const lines = wrapWords(text, null);
+                const maxWidth = lines.reduce((acc, line) => Math.max(acc, line.length), 0);
+                const maxHeight = Math.max(1, lines.length);
+                return { width: maxWidth, height: maxHeight };
+            }
+
+            const wrapWidth = Math.max(1, Math.floor(width));
+            const lines = wrapWords(text, wrapWidth);
+            const maxWidth = lines.reduce((acc, line) => Math.max(acc, line.length), 0);
+            const maxHeight = Math.max(1, lines.length);
+            return { width: maxWidth, height: maxHeight };
+        };
     }
 
     public onAttach(ctx: TreeContext, parent: TerminalContent | null) {
@@ -504,10 +607,19 @@ export class TerminalText extends YogaBase implements Drawable {
     }
 
     public render(matrix: RleMatrix, start: Point) {
-        matrix.setAscii(start, this.textContent!, {
-            color: this.parentStyles?.style?.color,
-            bgColor: this.parentStyles?.style?.backgroundColor,
-        });
+        const text = this.#textContent ?? "";
+        if (text.length === 0) {
+            return;
+        }
+
+        const computedWidth = Math.max(1, Math.floor(this.computedPosition.position.width));
+        const color = this.parentStyles?.style?.color;
+        const bgColor = this.parentStyles?.style?.backgroundColor;
+        const lines = wrapWords(text, computedWidth);
+
+        for (let i = 0; i < lines.length; i++) {
+            matrix.setAscii({ x: start.x, y: start.y + i }, lines[i], { color, bgColor });
+        }
     }
 
     public dispatchEvent(_eventName: string) {
@@ -520,10 +632,6 @@ export class TerminalText extends YogaBase implements Drawable {
     }
 
     public layout(): void {
-        const node = this.allocateYoga();
-
-        node.setWidth(this.textContent?.length ?? 0);
-        node.setHeight(1);
         this.recomputeLayout();
     }
 

@@ -98,11 +98,12 @@ export class TextInput extends TerminalContent {
         const innerWidth = Math.max(0, contentArea.width);
 
         if (innerWidth > 0) {
-            const value = this.#buffer.value;
+            const rawValue = this.#buffer.value;
+            const display = this.attributes.type === "password" ? "•".repeat(rawValue.length) : rawValue;
             const cursor = this.#buffer.cursor;
 
             const viewStart = cursor >= innerWidth ? cursor - (innerWidth - 1) : 0;
-            const visible = value.slice(viewStart, viewStart + innerWidth);
+            const visible = display.slice(viewStart, viewStart + innerWidth);
             const visibleCursor = cursor - viewStart;
 
             const textStyles: AnsiStyles = {

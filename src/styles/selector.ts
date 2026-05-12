@@ -130,5 +130,7 @@ export namespace Selector {
 
     export const specificity = (s: Selector) =>
         // TODO(zwade): Make this less hacky
-        10000 * (s.id === undefined ? 0 : 1) + 100 * (s.className ?? []).length + 1 * (s.tagName === undefined ? 0 : 1);
+        10000 * (s.id === undefined ? 0 : 1) +
+        100 * ((s.className?.length ?? 0) + (s.pseudoSelector?.length ?? 0)) +
+        1 * (s.tagName === undefined ? 0 : 1);
 }

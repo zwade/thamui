@@ -106,6 +106,22 @@ export class Segment {
     public toString() {
         return render(this.options, this.data);
     }
+
+    public toCells(): Cell[] {
+        const result: Cell[] = [];
+        for (let i = 0; i < this.data.length; i += this.characterWidth) {
+            const char = this.data.slice(i, i + this.characterWidth);
+            for (let w = 0; w < this.width; w++) {
+                result.push({ char: w === 0 ? char : "", options: this.options });
+            }
+        }
+        return result;
+    }
+}
+
+export interface Cell {
+    char: string;
+    options: SegmentOptions;
 }
 
 export interface RleBufferOptions extends SegmentOptions {
@@ -248,6 +264,16 @@ export class RleBuffer {
     public toString() {
         return this.segments.map((s) => s.toString()).join("");
     }
+
+    public toCells(): Cell[] {
+        const result: Cell[] = [];
+        for (const segment of this.segments) {
+            for (const cell of segment.toCells()) {
+                result.push(cell);
+            }
+        }
+        return result;
+    }
 }
 
 export interface RleMatrixOptions extends SegmentOptions {
@@ -266,6 +292,10 @@ export class RleMatrix {
 
     public static fromAscii(data: string, options: RleMatrixFromAsciiOptions = {}) {
         const width = options.width ?? data.length;
+
+        if (data.length === 0 || width === 0) {
+            return new RleMatrix(0, 0, [], options);
+        }
 
         const asArray = Array.from(new Array(data.length / width), (_, y) => [data.slice(y * width, (y + 1) * width)]);
         return RleMatrix.fromArray(asArray, options);

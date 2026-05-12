@@ -5,6 +5,7 @@ import { Direction } from "yoga-layout";
 import { ParsedStyle } from "../styles/styles.js";
 import { loadStyles } from "../styles/styles-runtime.js";
 import { Block } from "../terminal/builtin-nodes.js";
+import { generateProgressiveUpdates } from "../terminal/progressive-update.js";
 import { RleMatrix } from "../terminal/rle-buffer.js";
 import { TreeContext } from "../terminal/tree-context.js";
 import { Point } from "../terminal/utils.js";
@@ -55,6 +56,7 @@ const buildReconciliationLoop = async (App: () => EffectualElement, options: Rec
 
     let lastPass: ExpansionEntry | undefined = undefined;
     let lastReconciliation: ReconciliationChild[] | undefined = undefined;
+    let lastMatrix: RleMatrix | null = null;
 
     const yOffset = debugMode ? 10 : 0;
     treeContext.offsetY = yOffset;
@@ -62,7 +64,7 @@ const buildReconciliationLoop = async (App: () => EffectualElement, options: Rec
     let terminalSize: Point = { x: stdout.columns, y: stdout.rows - yOffset };
     let forceReflow = false;
 
-    !debugMode && stdout.write("\x1b[2J\x1b[1;1H\x1b[?1003h");
+    !debugMode && stdout.write("\x1b[2J\x1b[1;1H\x1b[?1003h\x1b[?25l");
     debugMode === "loop" && stdout.write("\x1b[?1003h");
 
     stdin.setRawMode(true);
@@ -82,6 +84,7 @@ const buildReconciliationLoop = async (App: () => EffectualElement, options: Rec
 
     stdout.on("resize", () => {
         terminalSize = { x: stdout.columns, y: stdout.rows };
+        lastMatrix = null;
         forceReflow = true;
     });
 
@@ -96,7 +99,7 @@ const buildReconciliationLoop = async (App: () => EffectualElement, options: Rec
         lastPass = nextPass;
         lastReconciliation = nextReconciliation;
 
-        debugMode || stdout.write("\x1b[1;1H\x1b[?1003h");
+        debugMode || stdout.write("\x1b[?1003h");
 
         rootElement.pushStyles({ style: {}, styleMap: loadStyles(userAgent) }, { index: 0, outOf: 1 });
         rootElement.layout({ force: true });
@@ -106,14 +109,12 @@ const buildReconciliationLoop = async (App: () => EffectualElement, options: Rec
         const mat = new RleMatrix(terminalSize.x, terminalSize.y);
         rootElement.render(mat, { x: 0, y: 0 });
 
-        for (let i = 0; i < mat.height; i++) {
-            stdout.write(mat.getRow(i).toString());
-
-            if (i < mat.height - 1) {
-                stdout.write("\r\n");
-            }
+        const updates = generateProgressiveUpdates(lastMatrix, mat);
+        if (updates.length > 0) {
+            stdout.write(updates);
         }
 
+        lastMatrix = mat;
         forceReflow = false;
     };
 
@@ -129,7 +130,7 @@ export const mount = (App: () => EffectualElement, options: ReconciliationOption
     const stderr = options.stderr ?? (process.stderr as Writable);
 
     process.on("uncaughtException", (err) => {
-        debugMode || stdout.write("\x1b[?1000l");
+        debugMode || stdout.write("\x1b[?1000l\x1b[?25h");
 
         stderr.write(String(err) + "\n");
         process.exit(1);

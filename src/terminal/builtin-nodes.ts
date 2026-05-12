@@ -1,6 +1,7 @@
 import { drawBorder } from "./drawing-utils.js";
 import { AnsiStyles, RleMatrix } from "./rle-buffer.js";
 import { TerminalContent } from "./terminal-nodes.js";
+import { KeyEvent } from "./tree-context.js";
 import { Point } from "./utils.js";
 
 export interface RenderResult {
@@ -42,5 +43,15 @@ export class Button extends Block {
 
     public constructor() {
         super("button");
+    }
+
+    public dispatchKeyEvent(event: KeyEvent): { handled: boolean } {
+        if ((event.key === "Enter" || event.key === " ") && !event.ctrl && !event.alt) {
+            this.dispatchEvent("mousedown");
+            this.dispatchEvent("mouseup");
+            return { handled: true };
+        }
+
+        return super.dispatchKeyEvent(event);
     }
 }
