@@ -6,10 +6,35 @@
   "license": "MIT",
   "dependencies": {
     "@types/node": "^22.15.3",
-    "ssh2": "^1.16.0"
+    "chalk": "^5.4.1",
+    "css": "^3.0.0",
+    "effectual": "^1.1.1",
+    "sass": "^1.87.0",
+    "ssh2": "^1.16.0",
+    "yoga-layout": "^3.2.1"
   },
   "devDependencies": {
+    "@types/css": "^0.0.38",
+    "@types/eslint": "^8",
     "@types/ssh2": "^1.15.5",
+    "@typescript-eslint/eslint-plugin": "^7.3.1",
+    "@typescript-eslint/parser": "^7.3.1",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-simple-import-sort": "^12.0.0",
+    "prettier": "^3.2.5",
     "typescript": "^5.8.3"
+  },
+  "packageManager": "yarn@4.9.1",
+  "r": {
+    "app:watch": "tsc -w",
+    "test:run": {
+      "script": "node --import ./dist/styles/register-hooks.js dist/terminal-test/index.js",
+      "watch": [
+        "./dist"
+      ]
+    }
   }
 }

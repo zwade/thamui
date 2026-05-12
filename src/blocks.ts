@@ -1,13 +1,9 @@
 import { GridItem, PushContinuation } from "./grid-item.js";
 import { GridMap } from "./map.js";
-import { RenderBuffer } from "./render-buffer.js";
 import { RleMatrix } from "./rle-buffer.js";
 import { Direction, numberToRune, Point, pointInDirection } from "./utils.js";
 
-export type BlockKind =
-    | "door"
-    | "target"
-    | `drain-${Direction}`
+export type BlockKind = "door" | "target" | `drain-${Direction}`;
 
 const kindToIcon: { [K in BlockKind]: string } = {
     door: "🚪",
@@ -16,25 +12,24 @@ const kindToIcon: { [K in BlockKind]: string } = {
     "drain-left": "⬅️",
     "drain-right": "➡️",
     "drain-top": "⬆️",
-}
-
+};
 
 export interface BlockOptions {
-    power: number,
-    target: number | null,
-    movable: boolean,
-    connectivity: number,
-    point: Point,
+    power: number;
+    target: number | null;
+    movable: boolean;
+    connectivity: number;
+    point: Point;
 }
 
 export type AsSerialized = {
-    kind: BlockKind,
-    power: number,
-    target: number | null,
-    movable: boolean,
-    connectivity: number,
-    point: Point,
-}
+    kind: BlockKind;
+    power: number;
+    target: number | null;
+    movable: boolean;
+    connectivity: number;
+    point: Point;
+};
 
 export abstract class Block extends GridItem {
     public abstract kind: BlockKind;
@@ -59,9 +54,7 @@ export abstract class Block extends GridItem {
         }
     }
 
-    constructor(
-        options: BlockOptions,
-    ) {
+    constructor(options: BlockOptions) {
         super(options.point);
         this.power = options.power;
         this.target = options.target;
@@ -69,48 +62,67 @@ export abstract class Block extends GridItem {
         this.movable = options.movable;
     }
 
-    public render(target: RenderBuffer, map: GridMap) {
-        const top = !!(this.connectivity & 0b1000) ? " ─── ^ ─── " : " ───────── ";
-        const right = !!(this.connectivity & 0b0100) ? " │>│ " : " │││ ";
-        const bottom = !!(this.connectivity & 0b0010) ? " ─── v ─── " : " ───────── ";
-        const left = !!(this.connectivity & 0b0001) ? " │<│ " : " │││ ";
+    public render(map: GridMap) {
+        const baseMatrix = RleMatrix.fromArray(
+            [["   ─────────   "], ["  │         │  "], ["  │         │  "], ["  │         │  "], ["   ─────────   "]],
+            { color: "red" },
+        );
 
-        const startX = this.x * 3 * 5;
-        const startY = this.y * 5;
+        if (this.connectivity & 0b1000) {
+            baseMatrix.setAscii({ x: 6, y: 0 }, " ^ ");
+        }
 
-        target.writeScreen({ x: startX + 2, y: startY }, RleMatrix.fromAscii(top));
-        target.writeScreen({ x: startX + 2 + 10, y: startY }, RleMatrix.fromAscii(right, 1));
-        target.writeScreen({ x: startX + 2, y: startY + 4 },  RleMatrix.fromAscii(bottom));
-        target.writeScreen({ x: startX + 2 , y: startY }, RleMatrix.fromAscii(left, 1));
+        if (this.connectivity & 0b0100) {
+            baseMatrix.setAscii({ x: 12, y: 2 }, ">");
+        }
+
+        if (this.connectivity & 0b0010) {
+            baseMatrix.setAscii({ x: 6, y: 4 }, " v ");
+        }
+
+        if (this.connectivity & 0b0100) {
+            baseMatrix.setAscii({ x: 2, y: 2 }, "<");
+        }
 
         if (!this.movable) {
-            target.writeScreen({ x: startX + 2, y: startY }, RleMatrix.fromAscii("┏"))
-            target.writeScreen({ x: startX + 2 + 10, y: startY }, RleMatrix.fromAscii("┓"))
-            target.writeScreen({ x: startX + 2, y: startY + 4 }, RleMatrix.fromAscii("┗"))
-            target.writeScreen({ x: startX + 2 + 10, y: startY + 4 }, RleMatrix.fromAscii("┛"))
+            baseMatrix.setAscii({ x: 2, y: 0 }, "┏");
+            baseMatrix.setAscii({ x: 2 + 10, y: 0 }, "┓");
+            baseMatrix.setAscii({ x: 2, y: 4 }, "┗");
+            baseMatrix.setAscii({ x: 2 + 10, y: 4 }, "┛");
         } else {
-            target.writeScreen({ x: startX + 2, y: startY }, RleMatrix.fromAscii("╭"))
-            target.writeScreen({ x: startX + 2 + 10, y: startY }, RleMatrix.fromAscii("╮"))
-            target.writeScreen({ x: startX + 2, y: startY + 4 }, RleMatrix.fromAscii("╰"))
-            target.writeScreen({ x: startX + 2 + 10, y: startY + 4 }, RleMatrix.fromAscii("╯"))
+            baseMatrix.setAscii({ x: 2, y: 0 }, "╭");
+            baseMatrix.setAscii({ x: 2 + 10, y: 0 }, "╮");
+            baseMatrix.setAscii({ x: 2, y: 4 }, "╰");
+            baseMatrix.setAscii({ x: 2 + 10, y: 4 }, "╯");
         }
 
         const effectivePower = map.getEffectivePower(this);
 
         if (this.power) {
-            target.writeScreen({ x: startX + 3 + 3, y: startY + 2 }, RleMatrix.fromAscii(numberToRune(this.power).padStart(2, " "), undefined, { color: "yellow" }));
+            baseMatrix.copyIn(
+                { x: 3 + 3, y: 2 },
+                RleMatrix.fromAscii(numberToRune(this.power).padStart(2, " "), { color: "yellow" }),
+            );
         }
 
         if (this.target) {
             const color = effectivePower === this.target ? "green" : "red";
-            target.writeScreen({ x: startX + 3 + 6, y: startY + 3 }, RleMatrix.fromAscii(numberToRune(this.target).padStart(2, " "), undefined, { color }));
+            baseMatrix.copyIn(
+                { x: 3 + 6, y: 3 },
+                RleMatrix.fromAscii(numberToRune(this.target).padStart(2, " "), { color }),
+            );
         }
 
         if (effectivePower) {
-            target.writeScreen({ x: startX + 3, y: startY + 3 }, RleMatrix.fromAscii(numberToRune(effectivePower).padStart(2, " "), undefined, { color: "blue" }));
+            baseMatrix.copyIn(
+                { x: 3, y: 3 },
+                RleMatrix.fromAscii(numberToRune(effectivePower).padStart(2, " "), { color: "blue" }),
+            );
         }
 
-        target.writeScreen({ x: startX + 3 + 6, y: startY + 1 }, RleMatrix.fromAscii(kindToIcon[this.kind]));
+        baseMatrix.copyIn({ x: 3 + 6, y: 1 }, RleMatrix.fromAscii(kindToIcon[this.kind]));
+
+        return baseMatrix;
     }
 
     public push(direction: Direction, map: GridMap): PushContinuation {
@@ -129,7 +141,7 @@ export abstract class Block extends GridItem {
             movable: this.movable,
             connectivity: this.connectivity,
             point: this.point,
-        }
+        };
     }
 }
 
@@ -150,7 +162,7 @@ export class TargetBlock extends Block {
 
     public postUpdate(map: GridMap) {
         if (map.getEffectivePower(this) === this.target) {
-            return { kind: "win" as "win" }
+            return { kind: "win" as const };
         }
 
         return undefined;

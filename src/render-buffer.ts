@@ -14,7 +14,7 @@ export class RenderBuffer {
         title: string,
         width: number,
         height: number,
-        writeable: { write: (data: string) => void } = process.stdout
+        writeable: { write: (data: string) => void } = process.stdout,
     ) {
         this.titleBuffer = title;
         this.width = width;
@@ -36,7 +36,13 @@ export class RenderBuffer {
         this.writeable.write("┌" + "─".repeat(this.titleBuffer.length + 2) + "┐\r\n");
         this.writeable.write("│ " + this.titleBuffer + " │\r\n");
 
-        this.writeable.write("├" + "─".repeat(this.titleBuffer.length + 2) + "┴" + "─".repeat(this.width - this.titleBuffer.length - 3) + "┐\r\n");
+        this.writeable.write(
+            "├" +
+                "─".repeat(this.titleBuffer.length + 2) +
+                "┴" +
+                "─".repeat(this.width - this.titleBuffer.length - 3) +
+                "┐\r\n",
+        );
 
         for (let i = 0; i < this.height; i++) {
             const row = this.buffer.getRow(i).toString();

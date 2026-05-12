@@ -1,35 +1,31 @@
-import { Block, AsSerialized as BlockAsSerialized } from "./blocks.js";
+import { AsSerialized as BlockAsSerialized, Block } from "./blocks.js";
 import { DisjointSet } from "./disjoint-set.js";
 import { GridItem } from "./grid-item.js";
-import { Player, AsSerialized as PlayerAsSerialized } from "./player.js";
+import { AsSerialized as PlayerAsSerialized, Player } from "./player.js";
 import { RenderBuffer } from "./render-buffer.js";
 import { binToDirections, Direction, directionToBin, invertDirection, Point, pointInDirection } from "./utils.js";
 
-export type CellValue =
-    | { kind: "block", id: string }
-    | { kind: "player", id: string }
+export type CellValue = { kind: "block"; id: string } | { kind: "player"; id: string };
 
 export interface Cell {
     stack: CellValue[];
 }
 
-export type CellItem =
-    | { kind: "block", value: Block }
-    | { kind: "player", value: Player }
+export type CellItem = { kind: "block"; value: Block } | { kind: "player"; value: Player };
 
 export interface MappedCell {
     stack: CellItem[];
 }
 
 export type CellItemAsSerialized =
-    | { kind: "block", value: BlockAsSerialized }
-    | { kind: "player", value: PlayerAsSerialized }
+    | { kind: "block"; value: BlockAsSerialized }
+    | { kind: "player"; value: PlayerAsSerialized };
 
 export type AsSerialized = {
     width: number;
     height: number;
     items: CellItemAsSerialized[];
-}
+};
 
 export class GridMap {
     public width;
@@ -62,7 +58,7 @@ export class GridMap {
         this.width = width;
         this.height = height;
         this.renderBuffer = renderBuffer;
-        this.map = Array.from(new Array(height), (_) => Array.from(new Array(width), (_) => ({ stack: [] })))
+        this.map = Array.from(new Array(height), (_) => Array.from(new Array(width), (_) => ({ stack: [] })));
 
         for (const item of items) {
             this.addItem(item);
@@ -73,7 +69,7 @@ export class GridMap {
         const map = this.map;
         const entityMap = this.entityMap;
 
-        return (function*() {
+        return (function* () {
             for (const row of map) {
                 for (const col of row) {
                     for (const item of col.stack) {
@@ -90,7 +86,7 @@ export class GridMap {
         })();
     }
 
-    public lookup(point: { x: number, y: number }): MappedCell | undefined {
+    public lookup(point: { x: number; y: number }): MappedCell | undefined {
         if (point.y < 0 || point.x < 0 || point.y >= this.height || point.x >= this.width) {
             return undefined;
         }
@@ -98,8 +94,8 @@ export class GridMap {
         const cell = this.map[point.y]?.[point.x];
 
         return {
-            stack: cell.stack.map(({ kind, id }) => this.entityMap.get(id)!)
-        }
+            stack: cell.stack.map(({ kind, id }) => this.entityMap.get(id)!),
+        };
     }
 
     public move(id: string, location: Point) {
@@ -136,32 +132,37 @@ export class GridMap {
         }
 
         for (const element of this.mapIter) {
-            element.value.render(this.renderBuffer, this);
+            const matrix = element.value.render(this);
+            const { x, y } = element.value.point;
+
+            this.renderBuffer.writeScreen({ x: x * 5 * 3, y: y * 5 }, matrix);
         }
 
         return this.renderBuffer.render();
     }
 
     public toSerialized(): AsSerialized {
-        const items = this.mapIter.map((item): CellItemAsSerialized => {
-            switch (item.kind) {
-                case "block": {
-                    return { kind: "block", value: item.value.toSerialized() };
+        const items = this.mapIter
+            .map((item): CellItemAsSerialized => {
+                switch (item.kind) {
+                    case "block": {
+                        return { kind: "block", value: item.value.toSerialized() };
+                    }
+                    case "player": {
+                        return { kind: "player", value: item.value.toSerialized() };
+                    }
                 }
-                case "player": {
-                    return { kind: "player", value: item.value.toSerialized() };
-                }
-            }
-        }).toArray();
+            })
+            .toArray();
 
         return {
             width: this.width,
             height: this.height,
-            items
-        }
+            items,
+        };
     }
 
-    public* getPlayers() {
+    public *getPlayers() {
         for (const element of this.mapIter) {
             if (element.kind === "player") {
                 yield element.value;

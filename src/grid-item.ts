@@ -1,14 +1,13 @@
 import { GridMap } from "./map.js";
 import { RenderBuffer } from "./render-buffer.js";
-import { Point, pointInDirection, Direction } from "./utils.js";
+import { RleMatrix } from "./rle-buffer.js";
+import { Direction, Point, pointInDirection } from "./utils.js";
 
-export type PushContinuation =
-    | { kind: "invalid" }
-    | { kind: "valid", commit: () => void }
+export type PushContinuation = { kind: "invalid" } | { kind: "valid"; commit: () => void };
 
 export type ControlAction =
     | undefined // do nothing
-    | { kind: "win" }
+    | { kind: "win" };
 
 export abstract class GridItem {
     public abstract power: number;
@@ -57,7 +56,7 @@ export abstract class GridItem {
         for (const element of cell.stack) {
             const res = element.value.push(direction, map);
             if (res.kind === "invalid") {
-                return { kind: "invalid" }
+                return { kind: "invalid" };
             }
 
             continuations.push(res.commit);
@@ -71,12 +70,16 @@ export abstract class GridItem {
                 }
 
                 map.move(this.id, nextPoint);
-            }
-        }
+            },
+        };
     }
 
-    public abstract render(buffer: RenderBuffer, map: GridMap): void;
+    public abstract render(map: GridMap): RleMatrix;
 
-    public preUpdate(map: GridMap): ControlAction { return undefined; };
-    public postUpdate(map: GridMap): ControlAction { return undefined; };
+    public preUpdate(map: GridMap): ControlAction {
+        return undefined;
+    }
+    public postUpdate(map: GridMap): ControlAction {
+        return undefined;
+    }
 }

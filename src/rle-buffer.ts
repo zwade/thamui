@@ -1,18 +1,54 @@
+import chalk from "chalk";
+
 import { Point } from "./utils.js";
 
-const colorToAnsi = {
-    "red": "\x1b[31m",
-    "green": "\x1b[32m",
-    "yellow": "\x1b[33m",
-    "blue": "\x1b[34m",
-    "clear": "\x1b[0m",
+export interface AnsiStyles {
+    color?: string;
+    bgColor?: string;
+    strikethrough?: boolean;
+    underline?: boolean;
+    bold?: boolean;
 }
 
-export interface SegmentOptions {
-    color?: keyof typeof colorToAnsi;
+export interface SegmentOptions extends AnsiStyles {
     characterWidth?: number;
 }
 
+const render = (styles: AnsiStyles, data: string) => {
+    let c = chalk;
+
+    if (styles.color) {
+        if (styles.color in chalk) {
+            c = (c as any)[styles.color];
+        } else {
+            c = c.hex(styles.color);
+        }
+    }
+
+    if (styles.bgColor) {
+        const asBgName = `bg${styles.bgColor[0].toUpperCase()}${styles.bgColor.slice(1)}`;
+
+        if (asBgName in chalk) {
+            c = (c as any)[asBgName];
+        } else {
+            c = c.bgHex(styles.bgColor);
+        }
+    }
+
+    if (styles.strikethrough) {
+        c = c.strikethrough;
+    }
+
+    if (styles.underline) {
+        c = c.underline;
+    }
+
+    if (styles.bold) {
+        c = c.bold;
+    }
+
+    return c(data);
+};
 
 export class Segment {
     public width;
@@ -61,16 +97,19 @@ export class Segment {
     public toSplit(index: number) {
         const start = Math.floor(index / this.width);
 
-        return [new Segment(this.width, this.data.slice(0, start), this.options), new Segment(this.width, this.data.slice(start), this.options)];
+        return [
+            new Segment(this.width, this.data.slice(0, start), this.options),
+            new Segment(this.width, this.data.slice(start), this.options),
+        ];
     }
 
     public toString() {
-        if (this.options.color) {
-            return colorToAnsi[this.options.color] + this.data + colorToAnsi.clear;
-        } else {
-            return this.data;
-        }
+        return render(this.options, this.data);
     }
+}
+
+export interface RleBufferOptions extends SegmentOptions {
+    empty?: string;
 }
 
 export class RleBuffer {
@@ -78,19 +117,21 @@ export class RleBuffer {
 
     private segments: Segment[];
     private empty?: string;
+    private options: RleBufferOptions;
 
     #prefixDirty = true;
     #prefixSums!: number[];
 
-    public static fromSegments(segments: Segment[], empty?: string) {
+    public static fromSegments(segments: Segment[], options: RleBufferOptions = {}) {
         const length = segments.reduce((acc, seg) => acc + seg.size, 0);
 
-        return new RleBuffer(length, empty, segments);
+        return new RleBuffer(length, segments, options);
     }
 
-    public constructor(length: number, empty?: string, segments?: Segment[]) {
+    public constructor(length: number, segments?: Segment[], options: RleBufferOptions = {}) {
         this.length = length;
-        this.empty = empty?.[0] ?? " ";
+        this.empty = options.empty?.[0] ?? " ";
+        this.options = options;
         this.segments = segments ?? [this.getEmpty(length)];
     }
 
@@ -99,16 +140,18 @@ export class RleBuffer {
             return this.#prefixSums;
         }
 
-        this.#prefixSums = this.segments.reduce<[number[], number]>(([val, acc], segment) => [[...val, acc + segment.size], acc + segment.size], [[0], 0])[0];
+        this.#prefixSums = this.segments.reduce<[number[], number]>(
+            ([val, acc], segment) => [[...val, acc + segment.size], acc + segment.size],
+            [[0], 0],
+        )[0];
         this.#prefixDirty = false;
 
         return this.#prefixSums;
     }
 
     private getEmpty(length: number) {
-        return new Segment(1, Buffer.alloc(length, this.empty).toString("utf-8"));
+        return new Segment(1, Buffer.alloc(length, this.empty).toString("utf-8"), this.options);
     }
-
 
     private _write(index: number, data: Segment) {
         let s = data.size;
@@ -118,9 +161,12 @@ export class RleBuffer {
 
         while (true) {
             const segmentIndex = this.prefixSums.findIndex((sum) => sum >= i);
-
             if (i === this.prefixSums[segmentIndex]) {
                 const segment = this.segments[segmentIndex];
+                if (!segment) {
+                    break;
+                }
+
                 const dropped = segment.dropPrefix(s);
                 if (segment.size === 0) {
                     this.segments.splice(segmentIndex, 1);
@@ -134,8 +180,12 @@ export class RleBuffer {
                 this.#prefixDirty = true;
             } else {
                 const segment = this.segments[segmentIndex - 1];
+                if (!segment) {
+                    break;
+                }
+
                 const localIndex = i - this.prefixSums[segmentIndex - 1];
-                if ((localIndex % segment.width) !== 0) {
+                if (localIndex % segment.width !== 0) {
                     i -= 1;
                     s += 1;
                     startDropped += 1;
@@ -181,6 +231,10 @@ export class RleBuffer {
     public copyIn(index: number, other: RleBuffer) {
         let runningIndex = index;
         for (let i = 0; i < other.segments.length; i++) {
+            if (runningIndex + other.segments[i].size > this.length) {
+                break;
+            }
+
             this.write(runningIndex, other.segments[i]);
             runningIndex += other.segments[i].size;
         }
@@ -196,32 +250,45 @@ export class RleBuffer {
     }
 }
 
-export class RleMatrix {
-    private data: RleBuffer[]
-    private width;
-    private height;
-    private empty;
+export interface RleMatrixOptions extends SegmentOptions {
+    empty?: string;
+}
 
-    public static fromAscii(data: string, width: number | undefined = undefined, segmentOptions: SegmentOptions = {}) {
-        width ??= data.length;
+export interface RleMatrixFromAsciiOptions extends RleMatrixOptions {
+    width?: number;
+}
+
+export class RleMatrix {
+    public height;
+
+    private data: RleBuffer[];
+    private options;
+
+    public static fromAscii(data: string, options: RleMatrixFromAsciiOptions = {}) {
+        const width = options.width ?? data.length;
 
         const asArray = Array.from(new Array(data.length / width), (_, y) => [data.slice(y * width, (y + 1) * width)]);
-        return RleMatrix.fromArray(asArray, " ", segmentOptions)
+        return RleMatrix.fromArray(asArray, options);
     }
 
-    public static fromArray(data: (string | Segment)[][], empty = " ", segmentOptions: SegmentOptions = {}) {
-        const asSegments = data.map((row) => row.map((el) => el instanceof Segment ? el : Segment.fromAscii(el, segmentOptions)));
-        const buffers = asSegments.map((row) => RleBuffer.fromSegments(row));
+    public static fromArray(data: (string | Segment)[][], options: RleMatrixOptions = {}) {
+        const asSegments = data.map((row) =>
+            row.map((el) => (el instanceof Segment ? el : Segment.fromAscii(el, options))),
+        );
+        const buffers = asSegments.map((row) => RleBuffer.fromSegments(row, options));
 
-        return new RleMatrix(buffers[0].length, buffers.length, empty, buffers);
+        return new RleMatrix(buffers[0].length, buffers.length, buffers, options);
     }
 
-    public constructor(width: number, height: number, empty: string = " ", data?: RleBuffer[]) {
-        this.width = width;
+    public constructor(width: number, height: number, data?: RleBuffer[], options: RleMatrixOptions = {}) {
         this.height = height;
-        this.empty = empty;
+        this.options = options;
 
-        this.data = data ?? Array.from(new Array(height), () => new RleBuffer(width, empty));
+        this.data = data ?? Array.from(new Array(height), () => new RleBuffer(width, undefined, options));
+    }
+
+    public get width() {
+        return this.data[0]?.length ?? 0;
     }
 
     public clear() {
@@ -232,11 +299,31 @@ export class RleMatrix {
 
     public copyIn(start: Point, other: RleMatrix) {
         for (let i = 0; i < other.height; i++) {
+            if (start.y + i >= this.data.length) {
+                break;
+            }
+
             this.data[start.y + i].copyIn(start.x, other.data[i]);
         }
     }
 
+    public setAscii(start: Point, data: string, options: RleMatrixFromAsciiOptions = {}) {
+        const mergedOptions: RleMatrixFromAsciiOptions = {
+            characterWidth: options.characterWidth,
+            color: options.color ?? this.options.color,
+            bgColor: options.bgColor ?? this.options.bgColor,
+            empty: options.empty ?? this.options.empty,
+        };
+
+        const matrix = RleMatrix.fromAscii(data, mergedOptions);
+        this.copyIn(start, matrix);
+    }
+
     public getRow(i: number) {
         return this.data[i];
+    }
+
+    public [Symbol.iterator]() {
+        return this.data[Symbol.iterator]();
     }
 }

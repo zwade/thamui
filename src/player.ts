@@ -4,12 +4,12 @@ import { RleMatrix, Segment } from "./rle-buffer.js";
 import { Point } from "./utils.js";
 
 export interface PlayerOptions {
-    point: Point
+    point: Point;
 }
 
 export type AsSerialized = {
     point: Point;
-}
+};
 
 export class Player extends GridItem {
     public power = 0;
@@ -22,24 +22,20 @@ export class Player extends GridItem {
         super(options.point);
     }
 
-    public render(target: RenderBuffer) {
+    public render() {
         const player = RleMatrix.fromAscii(
-            "               " +
-            "     (   )     " +
-            "   === | ===   " +
-            "     /   \\     " +
-            "               ",
-            15
+            "               " + "     (   )     " + "   === | ===   " + "     /   \\     " + "               ",
+            { width: 15 },
         );
 
-        player.copyIn({ x: 6, y: 1 }, RleMatrix.fromArray([[new Segment(2, "👀", { characterWidth: 2 })]]))
+        player.copyIn({ x: 6, y: 1 }, RleMatrix.fromArray([[new Segment(2, "👀", { characterWidth: 2 })]]));
 
-        target.writeScreen({ x: this.x * 15, y: this.y * 5 }, player)
+        return player;
     }
 
     public toSerialized(): AsSerialized {
         return {
             point: this.point,
-        }
+        };
     }
 }

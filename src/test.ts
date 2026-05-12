@@ -13,8 +13,8 @@ export const testMap: () => CellItem[] = () => [
             point: {
                 x: 1,
                 y: 1,
-            }
-        })
+            },
+        }),
     },
     {
         kind: "block",
@@ -26,8 +26,8 @@ export const testMap: () => CellItem[] = () => [
             point: {
                 x: 2,
                 y: 1,
-            }
-        })
+            },
+        }),
     },
     {
         kind: "block",
@@ -39,10 +39,10 @@ export const testMap: () => CellItem[] = () => [
             point: {
                 x: 3,
                 y: 3,
-            }
-        })
+            },
+        }),
     },
-        {
+    {
         kind: "block",
         value: new TargetBlock({
             connectivity: 0b0001,
@@ -52,8 +52,8 @@ export const testMap: () => CellItem[] = () => [
             point: {
                 x: 3,
                 y: 2,
-            }
-        })
+            },
+        }),
     },
     {
         kind: "player",
@@ -61,7 +61,7 @@ export const testMap: () => CellItem[] = () => [
             point: {
                 x: 0,
                 y: 0,
-            }
-        })
-    }
-]
+            },
+        }),
+    },
+];

@@ -4,7 +4,10 @@
         "outDir": "./dist",
         "target": "esnext",
         "module": "nodenext",
-        "moduleResolution": "nodenext"
+        "moduleResolution": "nodenext",
+        "jsxFragmentFactory": "F._fragment",
+        "jsxFactory": "F._jsx",
+        "jsx": "react"
     },
-    "include": ["src"]
+    "include": ["src", "styles"]
 }

@@ -1,5 +1,6 @@
-import ssh2 from "ssh2";
 import fs from "node:fs/promises";
+import ssh2 from "ssh2";
+
 import { GameManager } from "./game.js";
 import { testMap } from "./test.js";
 
@@ -15,7 +16,7 @@ export const startServer = async (port: number) => {
             client.on("session", (accept, reject) => {
                 const session = accept();
 
-                session.on("pty", (accept) => {
+                session.on("pty", (accept, reject, info) => {
                     accept();
                 });
 
@@ -26,11 +27,11 @@ export const startServer = async (port: number) => {
                         stream.end();
                     });
                 });
-            })
-        })
-    })
+            });
+        });
+    });
 
     server.listen(port, "0.0.0.0");
-}
+};
 
 await startServer(6022);

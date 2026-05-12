@@ -1,13 +1,14 @@
-import { Direction } from "./utils.js";
-import { GridMap, CellItem, AsSerialized as MapAsSerialized } from "./map.js";
-import * as rl from "node:readline/promises";
 import * as rlSync from "node:readline";
+import * as rl from "node:readline/promises";
+
+import { AsSerialized as MapAsSerialized, CellItem, GridMap } from "./map.js";
 import { RenderBuffer } from "./render-buffer.js";
+import { asEscapedHex, Direction } from "./utils.js";
 
 type Writeable = { write: (data: string) => void };
 type Readable = {
-    on(e: "data", cb: (buffer: Buffer) => void): void
-    off(e: "data", cb: (buffer: Buffer) => void): void
+    on(e: "data", cb: (buffer: Buffer) => void): void;
+    off(e: "data", cb: (buffer: Buffer) => void): void;
 };
 
 export interface GameManagerOptions {
@@ -43,7 +44,7 @@ export class GameManager {
         for (const player of this.map.getPlayers()) {
             const pushResult = player.push(direction, this.map);
             if (pushResult.kind === "invalid") {
-                this.log("Can't push block")
+                this.log("Can't push block");
                 return true;
             }
 
@@ -59,7 +60,7 @@ export class GameManager {
             if (action) {
                 switch (action.kind) {
                     case "win": {
-                        this.log("You won!!!!")
+                        this.log("You won!!!!");
                         this.map.renderAll({ resetScreen: true });
                         return false;
                     }
@@ -72,17 +73,16 @@ export class GameManager {
 
     private async singleAction(): Promise<boolean> {
         while (true) {
-            const sequence = await new Promise<string>((resolve) => {
+            const sequence = await new Promise<Buffer>((resolve) => {
                 const callback = (data: Buffer) => {
                     this.stdin.off("data", callback);
-                    resolve(data.toString("latin1"));
-
-                }
+                    resolve(data);
+                };
 
                 this.stdin.on("data", callback);
-            })
+            });
 
-            switch (sequence) {
+            switch (sequence.toString("latin1")) {
                 case "\x1b\x5b\x41": {
                     return this.performMoveAction("top");
                 }
@@ -118,8 +118,28 @@ export class GameManager {
                 }
 
                 default: {
+                    // Ansi control code for mouse events;
+                    if (sequence.subarray(0, 3).equals(Buffer.from([0x1b, 0x5b, 0x4d]))) {
+                        const event =
+                            sequence[3] === 0x43
+                                ? "move"
+                                : sequence[3] === 0x20
+                                  ? "down"
+                                  : sequence[3] === 0x23
+                                    ? "up"
+                                    : "unknown";
 
-                    this.log("Invalid option. Arrow Keys - move, Backspace - undo, Ctrl+C - exit");
+                        const xPos = sequence[4] - 0x21;
+                        const yPos = sequence[5] - 0x21;
+
+                        this.log(`Mouse ${event} at (${xPos}, ${yPos})`);
+
+                        continue;
+                    }
+
+                    this.log(
+                        `Invalid option [${asEscapedHex(sequence)}]. Arrow Keys - move, Backspace - undo, Ctrl+C - exit`,
+                    );
                     continue;
                 }
             }
@@ -128,6 +148,8 @@ export class GameManager {
 
     public async runGame() {
         let isFirst = true;
+        this.stdout.write("\x1b[2J\x1b[1;1H\x1b[?1003h");
+
         while (true) {
             const shouldContinue = await this.singleLoop(isFirst);
             isFirst = false;
@@ -136,6 +158,8 @@ export class GameManager {
                 break;
             }
         }
+
+        this.stdout.write("\x1b[?1000l");
     }
 
     public async log(message: string) {

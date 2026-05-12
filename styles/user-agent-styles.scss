@@ -1,0 +1,16 @@
+button {
+    border: 1px solid #F0F0FF;
+    border-radius: 1px;
+    color: #F0F0FF;
+    padding: 0px 1px;
+
+    &:hover {
+        border: 1px solid #B0B0D0;
+        color: #B0B0D0;
+    }
+
+    &:active {
+        border: 1px solid #9898B0;
+        color: #9898B0;
+    }
+}

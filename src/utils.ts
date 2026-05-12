@@ -1,26 +1,40 @@
-export type Direction = "left" | "right" | "top" | "bottom"
+export type Direction = "left" | "right" | "top" | "bottom";
 export type Point = {
     x: number;
     y: number;
-}
+};
+
+export type Box = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
+export type FourSize = {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+};
 
 export const pointInDirection = (point: Point, dir: Direction) => {
     const { x, y } = point;
     switch (dir) {
         case "bottom": {
-            return { x, y: y + 1 }
+            return { x, y: y + 1 };
         }
         case "top": {
-            return { x, y: y - 1 }
+            return { x, y: y - 1 };
         }
         case "left": {
-            return { x: x - 1, y }
+            return { x: x - 1, y };
         }
         case "right": {
-            return { x: x + 1, y }
+            return { x: x + 1, y };
         }
     }
-}
+};
 
 export const directionToBin = (direction: Direction) => {
     switch (direction) {
@@ -37,7 +51,7 @@ export const directionToBin = (direction: Direction) => {
             return 0b0001;
         }
     }
-}
+};
 
 export const binToDirections = (bin: number) => {
     const results: Direction[] = [];
@@ -59,7 +73,7 @@ export const binToDirections = (bin: number) => {
     }
 
     return results;
-}
+};
 
 export const invertDirection = (direction: Direction): Direction => {
     switch (direction) {
@@ -76,7 +90,7 @@ export const invertDirection = (direction: Direction): Direction => {
             return "right";
         }
     }
-}
+};
 
 export const digitToRune = (digit: number) => {
     switch (digit) {
@@ -108,11 +122,11 @@ export const digitToRune = (digit: number) => {
             throw new Error("Invalid digit");
         }
     }
-}
+};
 
 export const numberToRune = (number: number) => {
     let current = number;
-    let result: string[] = [];
+    const result: string[] = [];
     while (current > 0) {
         const digit = current & 0b111;
         result.push(digitToRune(digit));
@@ -121,4 +135,12 @@ export const numberToRune = (number: number) => {
     }
 
     return result.reverse().join("");
-}
+};
+
+export const asEscapedHex = (data: Buffer) => {
+    return [...data]
+        .map((byte) =>
+            byte > 0x20 && byte < 0x7f ? String.fromCharCode(byte) : `\\x${byte.toString(16).padStart(2, "0")}`,
+        )
+        .join("");
+};
