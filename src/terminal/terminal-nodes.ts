@@ -1,13 +1,13 @@
 import { assert } from "console";
-import { F, HTContentNode, HTTextNode } from "effectual";
-import { HTCSSStyleDeclaration } from "effectual/lib/reconciler/src/hydration-target.mjs";
+// import { F, HTContentNode, HTTextNode } from "effectual";
+// import { HTCSSStyleDeclaration } from "effectual/lib/reconciler/src/hydration-target.mjs";
 import Yoga, { Edge, Node as YogaNode } from "yoga-layout";
 
 import { Selector } from "../styles/selector.js";
+import { applyStyles } from "../styles/style-parsers.js";
 import { ParsedStyle } from "../styles/styles.js";
 import { mergeStyles, propagateStyles, Styles } from "../styles/styles-runtime.js";
 import { RleMatrix } from "./rle-buffer.js";
-import { applyStyles } from "./style-parsers.js";
 import { Box, FourSize, Point } from "./utils.js";
 
 export interface Drawable {
@@ -21,15 +21,20 @@ export interface Drawable {
     };
 }
 
-export const styles = (onDirty: () => void): HTCSSStyleDeclaration<TerminalNode> & F.CSSStyles => {
+export type StyleMap = {
+    setProperty(key: string, value: string): void;
+    cssText: string;
+} & Record<string, string>;
+
+export const styles = (onDirty: () => void): StyleMap => {
     const wellKnownGet = {
-        setProperty(this: HTCSSStyleDeclaration<TerminalNode>) {
+        setProperty(this: Record<string, string>) {
             return (key: string, value: string) => {
                 onDirty();
-                this[key as keyof F.CSSStyles] = value;
+                this[key] = value;
             };
         },
-        cssText(this: HTCSSStyleDeclaration<TerminalNode>) {
+        cssText(this: Record<string, string>) {
             return Object.entries(this)
                 .map(([key, value]) => `${key}: ${value};`)
                 .join(" ");
@@ -37,7 +42,7 @@ export const styles = (onDirty: () => void): HTCSSStyleDeclaration<TerminalNode>
     };
 
     const wellKnownSet = {
-        cssText(this: HTCSSStyleDeclaration<TerminalNode>, target: HTCSSStyleDeclaration<TerminalNode>, data: string) {
+        cssText(this: Record<string, string>, target: Record<string, string>, data: string) {
             for (const key in target) {
                 delete target[key];
             }
@@ -46,19 +51,19 @@ export const styles = (onDirty: () => void): HTCSSStyleDeclaration<TerminalNode>
             for (const [key, value] of styles) {
                 if (key && value) {
                     onDirty();
-                    this[key.trim() as keyof F.CSSStyles] = value.trim();
+                    this[key.trim()] = value.trim();
                 }
             }
         },
     };
 
-    return new Proxy<HTCSSStyleDeclaration<TerminalNode>>({} as any, {
+    return new Proxy<StyleMap>({} as any, {
         get(target, prop: string) {
             if (prop in wellKnownGet) {
                 return (wellKnownGet as any)[prop].bind(target);
             }
 
-            return target[prop as keyof F.CSSStyles] ?? "";
+            return target[prop] ?? "";
         },
         set(target, prop: string, value: string) {
             if (prop in wellKnownSet) {
@@ -66,7 +71,7 @@ export const styles = (onDirty: () => void): HTCSSStyleDeclaration<TerminalNode>
                 return true;
             }
 
-            target[prop as keyof F.CSSStyles] = value;
+            target[prop] = value;
             onDirty();
             return true;
         },
@@ -164,9 +169,9 @@ export class YogaBase {
     }
 }
 
-export class TerminalContent extends YogaBase implements HTContentNode<TerminalNode>, Drawable {
+export class TerminalContent extends YogaBase implements Drawable {
     public tagName: string;
-    public style: HTCSSStyleDeclaration<TerminalNode>;
+    public style: StyleMap;
 
     public children: TerminalNode[] = [];
     public nextSibling: TerminalNode | null = null;
@@ -429,7 +434,7 @@ export class TerminalContent extends YogaBase implements HTContentNode<TerminalN
     }
 }
 
-export class TerminalText extends YogaBase implements HTTextNode<TerminalNode>, Drawable {
+export class TerminalText extends YogaBase implements Drawable {
     public nextSibling: TerminalNode | null = null;
     public textContent: string | null;
 

@@ -6,8 +6,8 @@ import { loadStyles } from "../styles/styles-runtime.js";
 import { Block } from "../terminal/builtin-nodes.js";
 import { RleMatrix } from "../terminal/rle-buffer.js";
 import { TerminalNode } from "../terminal/terminal-nodes.js";
-import { TerminalTarget } from "../terminal/terminal-target.js";
 import { Point } from "../terminal/utils.js";
+import { TerminalTarget } from "./terminal-target.js";
 
 import userAgentString from "../../styles/user-agent-styles.scss";
 
@@ -18,7 +18,17 @@ const refreshRate = 1_000 / 16; // 16 fps
 type DebugMode = false | "static" | "loop";
 const debugMode = false as DebugMode;
 
-const buildReconciliationLoop = async (App: () => EffectualElement) => {
+export interface ReconciliationOptions {
+    stdin?: NodeJS.ReadStream;
+    stdout?: NodeJS.WriteStream;
+    stderr?: NodeJS.WriteStream;
+}
+
+const buildReconciliationLoop = async (App: () => EffectualElement, options: ReconciliationOptions = {}) => {
+    const stdin = options.stdin ?? process.stdin;
+    const stdout = options.stdout ?? process.stdout;
+    const stderr = options.stderr ?? process.stderr;
+
     const rootElement = new Block("root");
 
     const root = {
@@ -33,19 +43,19 @@ const buildReconciliationLoop = async (App: () => EffectualElement) => {
     let hadMouseEntry = new Set<TerminalNode>();
 
     const yOffset = debugMode ? 10 : 0;
-    let terminalSize: Point = { x: process.stdout.columns, y: process.stdout.rows - yOffset };
+    let terminalSize: Point = { x: stdout.columns, y: stdout.rows - yOffset };
     let forceReflow = false;
 
-    !debugMode && process.stdout.write("\x1b[2J\x1b[1;1H\x1b[?1003h");
-    debugMode === "loop" && process.stdout.write("\x1b[?1003h");
+    !debugMode && stdout.write("\x1b[2J\x1b[1;1H\x1b[?1003h");
+    debugMode === "loop" && stdout.write("\x1b[?1003h");
 
-    process.stdin.setRawMode(true);
-    process.stdin.on("data", (sequence) => {
+    stdin.setRawMode(true);
+    stdin.on("data", (sequence) => {
         switch (sequence.toString()) {
             case "\x1b":
             case "\x03":
             case "\x1c": {
-                process.stdout.write("\x1b[?1000l");
+                stdout.write("\x1b[?1000l");
                 process.exit(0);
                 break;
             }
@@ -95,8 +105,8 @@ const buildReconciliationLoop = async (App: () => EffectualElement) => {
         }
     });
 
-    process.stdout.on("resize", () => {
-        terminalSize = { x: process.stdout.columns, y: process.stdout.rows };
+    stdout.on("resize", () => {
+        terminalSize = { x: stdout.columns, y: stdout.rows };
         forceReflow = true;
     });
 
@@ -105,13 +115,13 @@ const buildReconciliationLoop = async (App: () => EffectualElement) => {
             return;
         }
 
-        const nextPass = expand(<App />, lastPass);
+        const nextPass = expand(F._jsx(App, {}), lastPass);
         const nextReconciliation = reconcile(nextPass, root, target, lastReconciliation);
 
         lastPass = nextPass;
         lastReconciliation = nextReconciliation;
 
-        debugMode || process.stdout.write("\x1b[1;1H\x1b[?1003h");
+        debugMode || stdout.write("\x1b[1;1H\x1b[?1003h");
 
         rootElement.pushStyles({ style: {}, styleMap: loadStyles(userAgent) }, { index: 0, outOf: 1 });
         rootElement.layout({ force: true });
@@ -122,10 +132,10 @@ const buildReconciliationLoop = async (App: () => EffectualElement) => {
         rootElement.render(mat, { x: 0, y: 0 });
 
         for (let i = 0; i < mat.height; i++) {
-            process.stdout.write(mat.getRow(i).toString());
+            stdout.write(mat.getRow(i).toString());
 
             if (i < mat.height - 1) {
-                process.stdout.write("\r\n");
+                stdout.write("\r\n");
             }
         }
 
@@ -139,11 +149,14 @@ const buildReconciliationLoop = async (App: () => EffectualElement) => {
     }
 };
 
-export const mount = (App: () => EffectualElement) => {
-    process.on("uncaughtException", (err) => {
-        debugMode || process.stdout.write("\x1b[?1000l");
+export const mount = (App: () => EffectualElement, options: ReconciliationOptions = {}) => {
+    const stdout = options.stdout ?? process.stdout;
+    const stderr = options.stderr ?? process.stderr;
 
-        console.error(err);
+    process.on("uncaughtException", (err) => {
+        debugMode || stdout.write("\x1b[?1000l");
+
+        stderr.write(String(err) + "\n");
         process.exit(1);
     });
 

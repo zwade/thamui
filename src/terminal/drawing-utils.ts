@@ -1,6 +1,6 @@
+import { border, borderRadius } from "../styles/style-parsers.js";
 import { Styles } from "../styles/styles-runtime.js";
 import { AnsiStyles, RleMatrix } from "./rle-buffer.js";
-import { border, borderRadius } from "./style-parsers.js";
 import { Box } from "./utils.js";
 
 export const drawBorder = (

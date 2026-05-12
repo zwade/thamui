@@ -1,9 +1,9 @@
 import { HydrationTarget } from "effectual";
 
-import { Block, Button } from "./builtin-nodes.js";
-import { TerminalText } from "./terminal-nodes.js";
+import { Block, Button } from "../terminal/builtin-nodes.js";
+import { TerminalNode, TerminalText } from "../terminal/terminal-nodes.js";
 
-export class TerminalTarget implements HydrationTarget {
+export class TerminalTarget implements HydrationTarget<TerminalNode> {
     createElement(tag: string) {
         switch (tag) {
             case "div": {
