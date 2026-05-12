@@ -4,7 +4,7 @@ A terminal UI library for Node.js with web-style ergonomics. JSX components, CSS
 
 It's built on top of [effectual](https://www.npmjs.com/package/effectual), a small React/Vue-flavored reactive framework. Effectual handles components, JSX, and reconciliation; Thamui handles everything below the line — a hand-rolled selector engine and style cascade, the Yoga bindings, a run-length-encoded matrix that backs each frame, ANSI output via chalk, mouse/keyboard decoding, focus management, and a per-frame cell diff that emits only the cursor moves and characters that actually changed.
 
-![Login portal demo](demo.png)
+<img width="743" height="603" alt="Screenshot 2026-05-12 at 3 48 33 PM" src="https://github.com/user-attachments/assets/44478b61-ca3f-4f02-b603-8351df6e4caf" />
 
 ## Highlights
 
