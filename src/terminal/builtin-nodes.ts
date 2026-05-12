@@ -38,6 +38,8 @@ export class Block extends TerminalContent {
 }
 
 export class Button extends Block {
+    public isSelectable = true;
+
     public constructor() {
         super("button");
     }

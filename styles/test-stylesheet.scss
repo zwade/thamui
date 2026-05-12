@@ -1,0 +1,18 @@
+.root {
+    flex-direction: row;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    background-color: black;
+
+    .btn {
+        background-color: blue;
+        color: white;
+        border-radius: 0.25em;
+
+        &:focus {
+            background-color: green;
+        }
+    }
+}

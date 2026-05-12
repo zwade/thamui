@@ -14,3 +14,15 @@ button {
         color: #9898B0;
     }
 }
+
+input {
+    border: 1px solid #F0F0FF;
+    color: #F0F0FF;
+    min-height: 1px;
+    min-width: 16px;
+
+    &:focus {
+        border: 1px solid #9898B0;
+        color: #9898B0;
+    }
+}

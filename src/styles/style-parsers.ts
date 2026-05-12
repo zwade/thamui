@@ -1,7 +1,7 @@
 // Large swaths taken from https://github.com/zwade/manus-dei/blob/master/client/src/components/ui/styles.tsx
 // License MIT
 
-import { Align, Edge, FlexDirection, Gutter, Justify, Node as YogaNode, PositionType } from "yoga-layout";
+import { Align, BoxSizing, Edge, FlexDirection, Gutter, Justify, Node as YogaNode, PositionType } from "yoga-layout";
 
 export type StyleRecord = Record<string, string>;
 export type Style = string;
@@ -266,6 +266,12 @@ export const applyFourSize = <T>(fn: (edge: Edge, value: T) => void, fourSize: F
 export const applyStyles = (node: YogaNode, styles: StyleRecord) => {
     node.setWidth(measureWithAuto(styles["width"]));
     node.setHeight(measureWithAuto(styles["height"]));
+    node.setBoxSizing(BoxSizing.ContentBox);
+
+    node.setMinWidth(measureWithPercent(styles["minWidth"]));
+    node.setMinHeight(measureWithPercent(styles["minHeight"]));
+    node.setMaxWidth(measureWithPercent(styles["maxWidth"]));
+    node.setMaxHeight(measureWithPercent(styles["maxHeight"]));
 
     applyFourSize(node.setMargin.bind(node), margin(styles));
     applyFourSize(node.setPadding.bind(node), padding(styles));

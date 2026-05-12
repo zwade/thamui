@@ -8,6 +8,7 @@ import { applyStyles } from "../styles/style-parsers.js";
 import { ParsedStyle } from "../styles/styles.js";
 import { mergeStyles, propagateStyles, Styles } from "../styles/styles-runtime.js";
 import { RleMatrix } from "./rle-buffer.js";
+import { KeyEvent, TreeContext } from "./tree-context.js";
 import { Box, FourSize, Point } from "./utils.js";
 
 export interface Drawable {
@@ -175,9 +176,12 @@ export class TerminalContent extends YogaBase implements Drawable {
 
     public children: TerminalNode[] = [];
     public nextSibling: TerminalNode | null = null;
+    public parent: TerminalContent | null = null;
+    public treeContext: TreeContext | null = null;
+    public isSelectable: boolean = false;
 
     protected dirty: boolean = true;
-    protected events: Map<string, Set<() => void>> = new Map();
+    protected events: Map<string, Set<(data?: any) => void>> = new Map();
     protected attributes: Record<string, string> = {};
     protected rawParentStyles: Styles.LocalStyleData | null = null;
     protected parentContext: Selector.ParentContext | null = null;
@@ -241,16 +245,18 @@ export class TerminalContent extends YogaBase implements Drawable {
 
             this.allocateYoga().insertChild(node.allocateYoga(), index);
             this.children.splice(index, 0, node);
+        } else {
+            node.nextSibling = null;
 
-            return;
+            this.allocateYoga().insertChild(node.allocateYoga(), this.children.length);
+            this.children.push(node);
+
+            this.markDirty();
         }
 
-        node.nextSibling = null;
-
-        this.allocateYoga().insertChild(node.allocateYoga(), this.children.length);
-        this.children.push(node);
-
-        this.markDirty();
+        if (this.treeContext) {
+            node.onAttach(this.treeContext, this);
+        }
     }
 
     public appendChild(node: TerminalNode) {
@@ -265,7 +271,40 @@ export class TerminalContent extends YogaBase implements Drawable {
             if (result) {
                 result.nextSibling = null;
                 this.allocateYoga().removeChild(result.allocateYoga());
+                result.onDetach();
             }
+        }
+
+        this.markDirty();
+    }
+
+    public onAttach(ctx: TreeContext, parent: TerminalContent | null) {
+        this.treeContext = ctx;
+        this.parent = parent;
+
+        for (const child of this.children) {
+            child.onAttach(ctx, this);
+        }
+    }
+
+    public onDetach() {
+        for (const child of this.children) {
+            child.onDetach();
+        }
+
+        if (this.treeContext?.focused === this) {
+            this.treeContext.blur(this);
+        }
+
+        this.treeContext = null;
+        this.parent = null;
+    }
+
+    public setFocused(value: boolean) {
+        if (value) {
+            this.states.add("focus");
+        } else {
+            this.states.delete("focus");
         }
 
         this.markDirty();
@@ -288,7 +327,7 @@ export class TerminalContent extends YogaBase implements Drawable {
         this.markDirty();
     }
 
-    public addEventListener(eventName: string, callback: () => void): void {
+    public addEventListener(eventName: string, callback: (data?: any) => void): void {
         if (!this.events.has(eventName)) {
             this.events.set(eventName, new Set());
         }
@@ -296,13 +335,17 @@ export class TerminalContent extends YogaBase implements Drawable {
         this.events.get(eventName)!.add(callback);
     }
 
-    public removeEventListener(eventName: string, callback: () => void): void {
+    public removeEventListener(eventName: string, callback: (data?: any) => void): void {
         if (this.events.has(eventName)) {
             this.events.get(eventName)!.delete(callback);
         }
     }
 
-    public dispatchEvent(eventName: string): { handled: boolean } {
+    public dispatchKeyEvent(_event: KeyEvent): { handled: boolean } {
+        return { handled: false };
+    }
+
+    public dispatchEvent(eventName: string, data?: unknown): { handled: boolean } {
         if (this.attributes.inert) {
             return { handled: false };
         }
@@ -321,6 +364,9 @@ export class TerminalContent extends YogaBase implements Drawable {
             }
             case "mousedown": {
                 this.states.add("active");
+                if (this.isSelectable && this.treeContext) {
+                    this.treeContext.claim(this);
+                }
                 this.markDirty();
                 break;
             }
@@ -334,7 +380,7 @@ export class TerminalContent extends YogaBase implements Drawable {
         const listeners = this.events.get(eventName);
         if (listeners && listeners.size > 0) {
             for (const listener of listeners) {
-                listener();
+                listener(data);
             }
 
             // TODO(should we still allow bubbling?)
@@ -436,6 +482,8 @@ export class TerminalContent extends YogaBase implements Drawable {
 
 export class TerminalText extends YogaBase implements Drawable {
     public nextSibling: TerminalNode | null = null;
+    public parent: TerminalContent | null = null;
+    public treeContext: TreeContext | null = null;
     public textContent: string | null;
 
     protected parentStyles: Styles.LocalStyleData | null = null;
@@ -443,6 +491,16 @@ export class TerminalText extends YogaBase implements Drawable {
     constructor(textContent: string) {
         super();
         this.textContent = textContent;
+    }
+
+    public onAttach(ctx: TreeContext, parent: TerminalContent | null) {
+        this.treeContext = ctx;
+        this.parent = parent;
+    }
+
+    public onDetach() {
+        this.treeContext = null;
+        this.parent = null;
     }
 
     public render(matrix: RleMatrix, start: Point) {

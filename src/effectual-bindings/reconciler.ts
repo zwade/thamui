@@ -1,11 +1,12 @@
 import { EffectualElement, expand, ExpansionEntry, F, reconcile, ReconciliationChild, RootHydrate } from "effectual";
+import { Readable, Writable } from "node:stream";
 import { Direction } from "yoga-layout";
 
 import { ParsedStyle } from "../styles/styles.js";
 import { loadStyles } from "../styles/styles-runtime.js";
 import { Block } from "../terminal/builtin-nodes.js";
 import { RleMatrix } from "../terminal/rle-buffer.js";
-import { TerminalNode } from "../terminal/terminal-nodes.js";
+import { TreeContext } from "../terminal/tree-context.js";
 import { Point } from "../terminal/utils.js";
 import { TerminalTarget } from "./terminal-target.js";
 
@@ -18,10 +19,22 @@ const refreshRate = 1_000 / 16; // 16 fps
 type DebugMode = false | "static" | "loop";
 const debugMode = false as DebugMode;
 
+export interface StdoutPtyLike {
+    columns: number;
+    rows: number;
+    write: (data: string) => void;
+    on: (event: "resize", listener: () => void) => void;
+}
+
+export interface StdinPtyLike {
+    setRawMode: (mode: boolean) => void;
+    on: (event: "data", listener: (data: Buffer) => void) => void;
+}
+
 export interface ReconciliationOptions {
-    stdin?: NodeJS.ReadStream;
-    stdout?: NodeJS.WriteStream;
-    stderr?: NodeJS.WriteStream;
+    stdin?: StdinPtyLike;
+    stdout?: StdoutPtyLike;
+    stderr?: Writable;
 }
 
 const buildReconciliationLoop = async (App: () => EffectualElement, options: ReconciliationOptions = {}) => {
@@ -30,6 +43,8 @@ const buildReconciliationLoop = async (App: () => EffectualElement, options: Rec
     const stderr = options.stderr ?? process.stderr;
 
     const rootElement = new Block("root");
+    const treeContext = new TreeContext(rootElement);
+    rootElement.onAttach(treeContext, null);
 
     const root = {
         kind: "root",
@@ -40,9 +55,10 @@ const buildReconciliationLoop = async (App: () => EffectualElement, options: Rec
 
     let lastPass: ExpansionEntry | undefined = undefined;
     let lastReconciliation: ReconciliationChild[] | undefined = undefined;
-    let hadMouseEntry = new Set<TerminalNode>();
 
     const yOffset = debugMode ? 10 : 0;
+    treeContext.offsetY = yOffset;
+
     let terminalSize: Point = { x: stdout.columns, y: stdout.rows - yOffset };
     let forceReflow = false;
 
@@ -51,57 +67,16 @@ const buildReconciliationLoop = async (App: () => EffectualElement, options: Rec
 
     stdin.setRawMode(true);
     stdin.on("data", (sequence) => {
-        switch (sequence.toString()) {
-            case "\x1b":
-            case "\x03":
-            case "\x1c": {
-                stdout.write("\x1b[?1000l");
-                process.exit(0);
-                break;
-            }
-            default: {
-                if (sequence.subarray(0, 3).equals(Buffer.from([0x1b, 0x5b, 0x4d]))) {
-                    const event =
-                        sequence[3] === 0x43
-                            ? "mousemove"
-                            : sequence[3] === 0x20
-                              ? "mousedown"
-                              : sequence[3] === 0x23
-                                ? "mouseup"
-                                : "unknown";
+        const asString = sequence.toString();
+        if (asString === "\x1b" || asString === "\x03" || asString === "\x1c") {
+            stdout.write("\x1b[?1000l");
+            process.exit(0);
+        }
 
-                    const xPos = sequence[4] - 0x21;
-                    const yPos = sequence[5] - 0x21 - yOffset;
+        const { dirty } = treeContext.dispatchTerminalSequence(sequence);
 
-                    const targets = rootElement.probe({ x: xPos, y: yPos });
-
-                    for (const target of targets.reverse()) {
-                        const { handled } = target.dispatchEvent(event);
-                        if (handled) {
-                            break;
-                        }
-                    }
-
-                    if (event === "mousemove") {
-                        const newMoveTargets = new Set<TerminalNode>(targets);
-                        for (const target of hadMouseEntry) {
-                            if (!newMoveTargets.has(target)) {
-                                target.dispatchEvent("mouseleave");
-                            }
-                        }
-
-                        for (const target of newMoveTargets) {
-                            if (!hadMouseEntry.has(target)) {
-                                target.dispatchEvent("mouseenter");
-                            }
-                        }
-
-                        hadMouseEntry = newMoveTargets;
-                    }
-
-                    forceReflow = true;
-                }
-            }
+        if (dirty) {
+            forceReflow = true;
         }
     });
 
@@ -151,7 +126,7 @@ const buildReconciliationLoop = async (App: () => EffectualElement, options: Rec
 
 export const mount = (App: () => EffectualElement, options: ReconciliationOptions = {}) => {
     const stdout = options.stdout ?? process.stdout;
-    const stderr = options.stderr ?? process.stderr;
+    const stderr = options.stderr ?? (process.stderr as Writable);
 
     process.on("uncaughtException", (err) => {
         debugMode || stdout.write("\x1b[?1000l");
@@ -160,5 +135,5 @@ export const mount = (App: () => EffectualElement, options: ReconciliationOption
         process.exit(1);
     });
 
-    buildReconciliationLoop(App);
+    buildReconciliationLoop(App, options);
 };
