@@ -3,12 +3,12 @@ import { F, HTContentNode, HTTextNode } from "effectual";
 import { HTCSSStyleDeclaration } from "effectual/lib/reconciler/src/hydration-target.mjs";
 import Yoga, { Edge, Node as YogaNode } from "yoga-layout";
 
-import { RleMatrix } from "../rle-buffer.js";
 import { Selector } from "../styles/selector.js";
 import { ParsedStyle } from "../styles/styles.js";
 import { mergeStyles, propagateStyles, Styles } from "../styles/styles-runtime.js";
-import { Box, FourSize, Point } from "../utils.js";
+import { RleMatrix } from "./rle-buffer.js";
 import { applyStyles } from "./style-parsers.js";
+import { Box, FourSize, Point } from "./utils.js";
 
 export interface Drawable {
     layout(options?: { force?: boolean }): void;

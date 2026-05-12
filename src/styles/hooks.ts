@@ -1,5 +1,5 @@
 import css from "css";
-import type { LoadHook } from "node:module";
+import type { LoadHook, ResolveHook } from "node:module";
 import * as sass from "sass";
 
 import { parseStyle } from "./styles.js";
@@ -31,4 +31,13 @@ export const load: LoadHook = (url, context, nextLoad) => {
         shortCircuit: true,
         source: cssData,
     };
+};
+
+export const resolve: ResolveHook = (specifier, context, nextResolve) => {
+    if (specifier.endsWith(".scss") || specifier.endsWith(".sass") || specifier.endsWith(".css")) {
+        const resolved = new URL(specifier, context.parentURL).href;
+        return { url: resolved, shortCircuit: true, format: "module" };
+    }
+
+    return nextResolve(specifier, context);
 };

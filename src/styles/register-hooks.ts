@@ -1,8 +1,7 @@
-import { register } from "node:module";
-import nodePath from "node:path";
+import { registerHooks } from "node:module";
 
-const rootDir = `file:${nodePath.join(new URL(import.meta.url).pathname, "..")}`;
+import { load, resolve } from "./hooks.js";
 
-register("./styles/hooks.js", rootDir);
+registerHooks({ load, resolve });
 
 export const VERSION = 1;

@@ -1,14 +1,28 @@
 {
-  "name": "thaumography",
-  "version": "1.0.0",
-  "main": "index.js",
+  "name": "thamui",
+  "version": "0.1.1",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./hook": {
+      "import": "./dist/styles/register-hooks.js",
+      "types": "./dist/styles/register-hooks.d.ts"
+    }
+  },
   "type": "module",
   "license": "MIT",
+  "files": [
+    "dist",
+    "styles",
+    "README.md"
+  ],
   "dependencies": {
     "@types/node": "^22.15.3",
     "chalk": "^5.4.1",
     "css": "^3.0.0",
-    "effectual": "^1.1.1",
+    "effectual": "^1.1.3",
     "sass": "^1.87.0",
     "ssh2": "^1.16.0",
     "yoga-layout": "^3.2.1"
@@ -28,10 +42,14 @@
     "typescript": "^5.8.3"
   },
   "packageManager": "yarn@4.9.1",
+  "scripts": {
+    "prepublish": "tsc"
+  },
   "r": {
     "app:watch": "tsc -w",
+    "lint": "eslint src",
     "test:run": {
-      "script": "node --import ./dist/styles/register-hooks.js dist/terminal-test/index.js",
+      "script": "node --import ./dist/styles/register-hooks.js dist/effectual-bindings/test.js",
       "watch": [
         "./dist"
       ]

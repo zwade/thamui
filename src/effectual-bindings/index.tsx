@@ -1,15 +1,13 @@
-import { expand, F, reconcile, ReconciliationChild, RootHydrate } from "effectual";
-import type { ExpansionEntry } from "effectual/lib/reconciler/src/expansion.mjs";
+import { EffectualElement, expand, ExpansionEntry, F, reconcile, ReconciliationChild, RootHydrate } from "effectual";
 import { Direction } from "yoga-layout";
 
-import { RleMatrix } from "../rle-buffer.js";
 import { ParsedStyle } from "../styles/styles.js";
 import { loadStyles } from "../styles/styles-runtime.js";
 import { Block } from "../terminal/builtin-nodes.js";
+import { RleMatrix } from "../terminal/rle-buffer.js";
 import { TerminalNode } from "../terminal/terminal-nodes.js";
 import { TerminalTarget } from "../terminal/terminal-target.js";
-import { Point } from "../utils.js";
-import { App } from "./app.js";
+import { Point } from "../terminal/utils.js";
 
 import userAgentString from "../../styles/user-agent-styles.scss";
 
@@ -20,7 +18,7 @@ const refreshRate = 1_000 / 16; // 16 fps
 type DebugMode = false | "static" | "loop";
 const debugMode = false as DebugMode;
 
-const buildReconciliationLoop = async () => {
+const buildReconciliationLoop = async (App: () => EffectualElement) => {
     const rootElement = new Block("root");
 
     const root = {
@@ -141,11 +139,13 @@ const buildReconciliationLoop = async () => {
     }
 };
 
-process.on("uncaughtException", (err) => {
-    debugMode || process.stdout.write("\x1b[?1000l");
+export const mount = (App: () => EffectualElement) => {
+    process.on("uncaughtException", (err) => {
+        debugMode || process.stdout.write("\x1b[?1000l");
 
-    console.error(err);
-    process.exit(1);
-});
+        console.error(err);
+        process.exit(1);
+    });
 
-buildReconciliationLoop();
+    buildReconciliationLoop(App);
+};

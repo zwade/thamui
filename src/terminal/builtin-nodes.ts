@@ -1,11 +1,7 @@
-import { Map } from "immutable";
-
-import { AnsiStyles, RleMatrix } from "../rle-buffer.js";
-import { ParsedStyle } from "../styles/styles.js";
-import { mergeStyles } from "../styles/styles-runtime.js";
-import { Point } from "../utils.js";
 import { drawBorder } from "./drawing-utils.js";
+import { AnsiStyles, RleMatrix } from "./rle-buffer.js";
 import { TerminalContent } from "./terminal-nodes.js";
+import { Point } from "./utils.js";
 
 export interface RenderResult {
     start: Point;

@@ -3,7 +3,7 @@
 
 import { Align, Edge, FlexDirection, Gutter, Justify, Node as YogaNode, PositionType } from "yoga-layout";
 
-export type Styles = Record<string, string>;
+export type StyleRecord = Record<string, string>;
 export type Style = string;
 
 export type MeasureWithAuto = number | `${number}%` | "auto";
@@ -207,7 +207,7 @@ const multiPart =
         notFourSize?: boolean,
         overridePartNames?: [Style, Style, Style, Style],
     ) =>
-    (styles: Styles) => {
+    (styles: StyleRecord) => {
         const partNames =
             overridePartNames ?? ["Top", "Right", "Bottom", "Left"].map((suffix) => `${baseName}${suffix}`);
 
@@ -244,7 +244,7 @@ export const borderRadius = multiPart("borderRadius", measureWithPercent, true, 
     "borderBottomLeftRadius",
 ]);
 
-export const position = (styles: Styles) => {
+export const position = (styles: StyleRecord) => {
     const baseResult = multiPart("", measureWithAuto, true, ["top", "right", "bottom", "left"])(styles);
     if (!baseResult) return baseResult;
 
@@ -263,7 +263,7 @@ export const applyFourSize = <T>(fn: (edge: Edge, value: T) => void, fourSize: F
     fn(Edge.Left, left);
 };
 
-export const applyStyles = (node: YogaNode, styles: Styles) => {
+export const applyStyles = (node: YogaNode, styles: StyleRecord) => {
     node.setWidth(measureWithAuto(styles["width"]));
     node.setHeight(measureWithAuto(styles["height"]));
 

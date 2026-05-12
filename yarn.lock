@@ -1031,10 +1031,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"effectual@npm:^1.1.1":
-  version: 1.1.1
-  resolution: "effectual@npm:1.1.1"
-  checksum: 10c0/413a3756f78b97845831d0d7ab74c5b5f55d0157ab43873cfda0ac949924a76b8f11e590b8249a523b75220f8118325cb445258e1b5ce8b76f13979aefacc9af
+"effectual@npm:^1.1.3":
+  version: 1.1.3
+  resolution: "effectual@npm:1.1.3"
+  checksum: 10c0/605bb3d549cef4e7b6af4a7880a71d60d3aa847bbcd839494bbcafc6e7ea7cd122dd3e6f7964b632fe2e54e7fff2d8373517122fd614e2556083289beec60430
   languageName: node
   linkType: hard
 
@@ -3320,9 +3320,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"thaumography@workspace:.":
+"thamui@workspace:.":
   version: 0.0.0-use.local
-  resolution: "thaumography@workspace:."
+  resolution: "thamui@workspace:."
   dependencies:
     "@types/css": "npm:^0.0.38"
     "@types/eslint": "npm:^8"
@@ -3332,7 +3332,7 @@ __metadata:
     "@typescript-eslint/parser": "npm:^7.3.1"
     chalk: "npm:^5.4.1"
     css: "npm:^3.0.0"
-    effectual: "npm:^1.1.1"
+    effectual: "npm:^1.1.3"
     eslint: "npm:^8.57.0"
     eslint-config-prettier: "npm:^9.1.0"
     eslint-plugin-prettier: "npm:^5.1.3"
