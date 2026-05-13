@@ -1,8 +1,11 @@
 import { drawBorder } from "./drawing-utils.js";
-import { AnsiStyles, RleMatrix } from "./rle-buffer.js";
+import { AnsiStyles, isFullwidth, RleMatrix, visualWidth } from "./rle-buffer.js";
 import { SplitBuffer } from "./split-buffer.js";
 import { TerminalContent } from "./terminal-nodes.js";
 import { KeyEvent } from "./tree-context.js";
+import { Point } from "./utils.js";
+
+const cellWidthOf = (ch: string): 1 | 2 => (isFullwidth(ch.codePointAt(0)!) ? 2 : 1);
 
 const computeVisualLines = (text: string, width: number): string[] => {
     if (width <= 0) {
@@ -11,18 +14,30 @@ const computeVisualLines = (text: string, width: number): string[] => {
 
     const lines: string[] = [];
     let line = "";
+    let lineCells = 0;
 
     for (const ch of text) {
         if (ch === "\n") {
             lines.push(line);
             line = "";
+            lineCells = 0;
             continue;
         }
 
-        line += ch;
-        if (line.length >= width) {
+        const w = cellWidthOf(ch);
+        if (lineCells > 0 && lineCells + w > width) {
             lines.push(line);
             line = "";
+            lineCells = 0;
+        }
+
+        line += ch;
+        lineCells += w;
+
+        if (lineCells >= width) {
+            lines.push(line);
+            line = "";
+            lineCells = 0;
         }
     }
 
@@ -37,19 +52,26 @@ const computeVisualPos = (text: string, width: number, cursor: number): { row: n
 
     let row = 0;
     let col = 0;
+    let charIdx = 0;
 
-    for (let i = 0; i < cursor && i < text.length; i++) {
-        const ch = text[i];
+    for (const ch of text) {
+        if (charIdx >= cursor) break;
         if (ch === "\n") {
             row++;
             col = 0;
         } else {
-            col++;
+            const w = cellWidthOf(ch);
+            if (col > 0 && col + w > width) {
+                row++;
+                col = 0;
+            }
+            col += w;
             if (col >= width) {
                 row++;
                 col = 0;
             }
         }
+        charIdx += ch.length;
     }
 
     return { row, col };
@@ -64,16 +86,16 @@ const offsetAtVisualPos = (text: string, width: number, targetRow: number, targe
     let col = 0;
     let bestOffset = -1;
     let bestCol = -1;
+    let charIdx = 0;
 
-    for (let i = 0; i <= text.length; i++) {
+    while (true) {
         if (row === targetRow) {
             if (col <= targetCol && col > bestCol) {
-                bestOffset = i;
+                bestOffset = charIdx;
                 bestCol = col;
             }
-
             if (col === targetCol) {
-                return i;
+                return charIdx;
             }
         }
 
@@ -81,33 +103,69 @@ const offsetAtVisualPos = (text: string, width: number, targetRow: number, targe
             break;
         }
 
-        if (i === text.length) {
+        if (charIdx >= text.length) {
             break;
         }
 
-        const ch = text[i];
+        const code = text.codePointAt(charIdx)!;
+        const ch = String.fromCodePoint(code);
+
         if (ch === "\n") {
             row++;
             col = 0;
         } else {
-            col++;
+            const w = isFullwidth(code) ? 2 : 1;
+            if (col > 0 && col + w > width) {
+                row++;
+                col = 0;
+            }
+            col += w;
             if (col >= width) {
                 row++;
                 col = 0;
             }
         }
+
+        charIdx += ch.length;
     }
 
     return bestOffset >= 0 ? bestOffset : text.length;
+};
+
+const charAtCell = (line: string, targetCol: number): string => {
+    let col = 0;
+    for (const ch of line) {
+        if (col === targetCol) {
+            return ch;
+        }
+
+        const w = cellWidthOf(ch);
+        if (col < targetCol && col + w > targetCol) {
+            // Target lands mid-fullwidth; treat as space.
+            return " ";
+        }
+
+        col += w;
+        if (col > targetCol) {
+            break;
+        }
+    }
+
+    return " ";
 };
 
 export class TextArea extends TerminalContent {
     public isSelectable = true;
 
     #buffer = new SplitBuffer();
+    #cursorOffset: Point | null = null;
 
     public constructor() {
         super("textarea");
+    }
+
+    public getCursorOffset(): Point | null {
+        return this.#cursorOffset;
     }
 
     public get value(): string {
@@ -171,22 +229,14 @@ export class TextArea extends TerminalContent {
                 changed = this.#buffer.insert("\n");
                 break;
             }
-            case "Paste": {
-                const text = (event.text ?? "").replace(/\r\n?/g, "\n");
-                if (text.length > 0) {
-                    changed = this.#buffer.insert(text);
-                }
-                break;
-            }
             default: {
-                if (event.ctrl) {
+                if (event.ctrl || event.alt || !event.text) {
                     return { handled: false };
                 }
 
-                if (event.key.length === 1) {
-                    changed = this.#buffer.insert(event.key);
-                } else {
-                    return { handled: false };
+                const text = event.text.replace(/\r\n?/g, "\n");
+                if (text.length > 0) {
+                    changed = this.#buffer.insert(text);
                 }
             }
         }
@@ -236,24 +286,39 @@ export class TextArea extends TerminalContent {
                     break;
                 }
 
-                const line = lines[lineIdx].padEnd(innerWidth, " ");
-                const lineMatrix = RleMatrix.fromAscii(line, textStyles);
-                composite.copyIn({ x: innerX, y: innerY + i }, lineMatrix);
+                const line = lines[lineIdx];
+                composite.setText({ x: innerX, y: innerY + i }, line, textStyles);
+
+                const lineCells = visualWidth(line);
+                if (lineCells < innerWidth) {
+                    composite.setAscii(
+                        { x: innerX + lineCells, y: innerY + i },
+                        " ".repeat(innerWidth - lineCells),
+                        textStyles,
+                    );
+                }
             }
 
+            this.#cursorOffset = null;
             if (this.states.has("focus")) {
                 const visualRow = cursorPos.row - scrollY;
                 if (visualRow >= 0 && visualRow < innerHeight && cursorPos.col < innerWidth) {
                     const cursorLine = lines[scrollY + visualRow] ?? "";
-                    const cursorChar = cursorLine[cursorPos.col] ?? " ";
+                    const cursorChar = charAtCell(cursorLine, cursorPos.col);
                     const cursorStyles: AnsiStyles = {
                         color: style.backgroundColor ?? "black",
                         bgColor: style.color ?? "white",
                     };
-                    const cursorMatrix = RleMatrix.fromAscii(cursorChar, cursorStyles);
-                    composite.copyIn({ x: innerX + cursorPos.col, y: innerY + visualRow }, cursorMatrix);
+                    composite.setText(
+                        { x: innerX + cursorPos.col, y: innerY + visualRow },
+                        cursorChar,
+                        cursorStyles,
+                    );
+                    this.#cursorOffset = { x: innerX + cursorPos.col, y: innerY + visualRow };
                 }
             }
+        } else {
+            this.#cursorOffset = null;
         }
 
         this.setCachedComposite(composite);

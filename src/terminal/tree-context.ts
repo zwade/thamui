@@ -76,7 +76,16 @@ export const decodeKeyEvent = (raw: Buffer): KeyEvent | null => {
         }
 
         if (b >= 0x20 && b <= 0x7e) {
-            return { key: String.fromCharCode(b), ctrl: false, alt: false, raw };
+            const ch = String.fromCharCode(b);
+            return { key: ch, text: ch, ctrl: false, alt: false, raw };
+        }
+    }
+
+    if (raw.length > 1 && raw[0] >= 0x80) {
+        const text = raw.toString("utf8");
+        // eslint-disable-next-line no-control-regex
+        if (text.length > 0 && !/[\x00-\x1f\x7f]/.test(text) && !text.includes("�")) {
+            return { key: text, text, ctrl: false, alt: false, raw };
         }
     }
 

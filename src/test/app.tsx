@@ -37,6 +37,11 @@ export const App = () => {
                     />
                 </div>
 
+                <div class="field">
+                    <div class="label">Public Key</div>
+                    <textarea />
+                </div>
+
                 <div class="actions">
                     <button class="ghost">Sign up</button>
                     <button class="submit" $on:mouseup={submit}>

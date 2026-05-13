@@ -1,5 +1,5 @@
 import { EffectualElement, expand, ExpansionEntry, F, reconcile, ReconciliationChild, RootHydrate } from "effectual";
-import { Readable, Writable } from "node:stream";
+import { Writable } from "node:stream";
 import { Direction } from "yoga-layout";
 
 import { ParsedStyle } from "../styles/styles.js";
@@ -20,7 +20,7 @@ const rootContext = { index: 0, outOf: 1 };
 const refreshRate = 1_000 / 16; // 16 fps
 
 type DebugMode = false | "static" | "loop" | "timing";
-const debugMode = "timing" as DebugMode;
+const debugMode = false as DebugMode;
 
 export interface StdoutPtyLike {
     columns: number;
@@ -148,6 +148,21 @@ const buildReconciliationLoop = (App: () => EffectualElement, options: Reconcili
 
                 if (updates.length > 0) {
                     stdout.write(updates);
+                }
+
+                const focused = treeContext.focused;
+                const focusedCursor = focused?.getCursorOffset();
+                if (focusedCursor && focused) {
+                    let absX = focusedCursor.x;
+                    let absY = focusedCursor.y;
+                    let node: typeof focused | null = focused;
+                    while (node) {
+                        const pos = node.computedPosition.position;
+                        absX += pos.x;
+                        absY += pos.y;
+                        node = node.parent;
+                    }
+                    stdout.write(`\x1b[${absY + 1 + yOffset};${absX + 1}H`);
                 }
 
                 debugMode === "timing" && timings.push(["flush", performance.now()]);

@@ -33,10 +33,12 @@ const renderRun = (cells: Cell[]): string => {
 
         const data = cells
             .slice(start, i)
-            .map((c) => (c.char.length === 0 ? " " : c.char))
+            .map((c) => c.char)
             .join("");
 
-        result += new Segment(1, data, style).toString();
+        if (data.length > 0) {
+            result += new Segment(1, data, style).toString();
+        }
     }
 
     return result;

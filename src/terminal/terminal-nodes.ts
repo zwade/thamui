@@ -471,9 +471,10 @@ export class TerminalContent extends YogaBase implements Drawable {
                 this.#lastAppliedStyles = computed;
             }
 
-            this.recomputeLayout();
             this.#layoutDirty = false;
         }
+
+        this.recomputeLayout();
 
         for (const child of this.children) {
             child.layout(options);
@@ -539,6 +540,10 @@ export class TerminalContent extends YogaBase implements Drawable {
     public render(): RleMatrix {
         const bounds = this.computedPosition.position;
         return new RleMatrix(bounds.width, bounds.height);
+    }
+
+    public getCursorOffset(): Point | null {
+        return null;
     }
 }
 

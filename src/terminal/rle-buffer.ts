@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { createHash } from "node:crypto";
 
 import { Point } from "./utils.js";
 
@@ -120,7 +121,24 @@ export class Segment {
 
     public signature(): string {
         const o = this.options;
-        return `${this.data}\x01${o.color ?? ""}\x01${o.bgColor ?? ""}\x01${o.bold ? 1 : 0}\x01${o.underline ? 1 : 0}\x01${o.strikethrough ? 1 : 0}\x01${this.characterWidth}\x01${this.width}`;
+        const hash = createHash("sha256");
+        hash.update(this.data)
+            .update("\x00")
+            .update(o.color ?? "")
+            .update("\x00")
+            .update(o.bgColor ?? "")
+            .update("\x00")
+            .update(o.bold ? "1" : "0")
+            .update("\x00")
+            .update(o.underline ? "1" : "0")
+            .update("\x00")
+            .update(o.strikethrough ? "1" : "0")
+            .update("\x00")
+            .update(this.characterWidth.toString())
+            .update("\x00")
+            .update(this.width.toString());
+
+        return hash.digest("hex");
     }
 }
 
@@ -128,6 +146,67 @@ export interface Cell {
     char: string;
     options: SegmentOptions;
 }
+
+export const isFullwidth = (codepoint: number): boolean => {
+    return (
+        (codepoint >= 0x1100 && codepoint <= 0x115f) ||
+        (codepoint >= 0x2e80 && codepoint <= 0x303e) ||
+        (codepoint >= 0x3041 && codepoint <= 0x33ff) ||
+        (codepoint >= 0x3400 && codepoint <= 0x4dbf) ||
+        (codepoint >= 0x4e00 && codepoint <= 0x9fff) ||
+        (codepoint >= 0xa000 && codepoint <= 0xa4cf) ||
+        (codepoint >= 0xac00 && codepoint <= 0xd7a3) ||
+        (codepoint >= 0xf900 && codepoint <= 0xfaff) ||
+        (codepoint >= 0xfe30 && codepoint <= 0xfe4f) ||
+        (codepoint >= 0xff00 && codepoint <= 0xff60) ||
+        (codepoint >= 0xffe0 && codepoint <= 0xffe6) ||
+        (codepoint >= 0x1f300 && codepoint <= 0x1f64f) ||
+        (codepoint >= 0x1f680 && codepoint <= 0x1f6ff) ||
+        (codepoint >= 0x1f900 && codepoint <= 0x1f9ff) ||
+        (codepoint >= 0x20000 && codepoint <= 0x3fffd)
+    );
+};
+
+export const visualWidth = (text: string): number => {
+    let width = 0;
+    for (const ch of text) {
+        width += isFullwidth(ch.codePointAt(0)!) ? 2 : 1;
+    }
+    return width;
+};
+
+export const segmentsForLine = (text: string, options: SegmentOptions): Segment[] => {
+    const segments: Segment[] = [];
+    let buf = "";
+    let bufCellWidth: 1 | 2 = 1;
+    let bufCharWidth: 1 | 2 = 1;
+
+    const flush = () => {
+        if (buf.length === 0) {
+            return;
+        }
+        segments.push(new Segment(bufCellWidth, buf, { ...options, characterWidth: bufCharWidth }));
+        buf = "";
+    };
+
+    for (const ch of text) {
+        const code = ch.codePointAt(0)!;
+        const w: 1 | 2 = isFullwidth(code) ? 2 : 1;
+        const cw: 1 | 2 = ch.length === 2 ? 2 : 1;
+
+        if (buf.length > 0 && (w !== bufCellWidth || cw !== bufCharWidth)) {
+            flush();
+        }
+        if (buf.length === 0) {
+            bufCellWidth = w;
+            bufCharWidth = cw;
+        }
+        buf += ch;
+    }
+    flush();
+
+    return segments;
+};
 
 export interface RleBufferOptions extends SegmentOptions {
     empty?: string;
@@ -275,12 +354,14 @@ export class RleBuffer {
 
     public signature(): string {
         if (this.#signature === null) {
-            const parts: string[] = [];
+            const hash = createHash("sha256");
             for (const segment of this.segments) {
-                parts.push(segment.signature());
+                hash.update(segment.signature()).update("\x00");
             }
-            this.#signature = parts.join("|");
+
+            this.#signature = hash.digest("hex");
         }
+
         return this.#signature;
     }
 
@@ -370,6 +451,30 @@ export class RleMatrix {
 
         const matrix = RleMatrix.fromAscii(data, mergedOptions);
         this.copyIn(start, matrix);
+    }
+
+    public setText(start: Point, text: string, options: SegmentOptions = {}) {
+        if (start.y < 0 || start.y >= this.data.length) {
+            return;
+        }
+
+        const mergedOptions: SegmentOptions = {
+            color: options.color ?? this.options.color,
+            bgColor: options.bgColor ?? this.options.bgColor,
+            bold: options.bold,
+            underline: options.underline,
+            strikethrough: options.strikethrough,
+        };
+
+        const row = this.data[start.y];
+        let x = start.x;
+        for (const segment of segmentsForLine(text, mergedOptions)) {
+            if (x + segment.size > row.length) {
+                break;
+            }
+            row.write(x, segment);
+            x += segment.size;
+        }
     }
 
     public getRow(i: number) {

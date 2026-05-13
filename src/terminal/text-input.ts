@@ -1,13 +1,19 @@
 import { drawBorder } from "./drawing-utils.js";
-import { AnsiStyles, RleMatrix } from "./rle-buffer.js";
+import { AnsiStyles, isFullwidth, RleMatrix, visualWidth } from "./rle-buffer.js";
 import { SplitBuffer } from "./split-buffer.js";
 import { TerminalContent } from "./terminal-nodes.js";
 import { KeyEvent } from "./tree-context.js";
+import { Point } from "./utils.js";
 
 export class TextInput extends TerminalContent {
     public isSelectable = true;
 
     #buffer = new SplitBuffer();
+    #cursorOffset: Point | null = null;
+
+    public getCursorOffset(): Point | null {
+        return this.#cursorOffset;
+    }
 
     public constructor() {
         super("input");
@@ -61,22 +67,14 @@ export class TextInput extends TerminalContent {
                 changed = this.#buffer.backspace();
                 break;
             }
-            case "Paste": {
-                const text = (event.text ?? "").replace(/[\r\n]+/g, " ");
-                if (text.length > 0) {
-                    changed = this.#buffer.insert(text);
-                }
-                break;
-            }
             default: {
-                if (event.ctrl) {
+                if (event.ctrl || event.alt || !event.text) {
                     return { handled: false };
                 }
 
-                if (event.key.length === 1) {
-                    changed = this.#buffer.insert(event.key);
-                } else {
-                    return { handled: false };
+                const text = event.text.replace(/[\r\n]+/g, " ");
+                if (text.length > 0) {
+                    changed = this.#buffer.insert(text);
                 }
             }
         }
@@ -112,26 +110,63 @@ export class TextInput extends TerminalContent {
             const display = this.attributes.type === "password" ? "•".repeat(rawValue.length) : rawValue;
             const cursor = this.#buffer.cursor;
 
-            const viewStart = cursor >= innerWidth ? cursor - (innerWidth - 1) : 0;
-            const visible = display.slice(viewStart, viewStart + innerWidth);
-            const visibleCursor = cursor - viewStart;
+            const cursorCell = visualWidth(display.slice(0, cursor));
+            const viewStartTarget = cursorCell >= innerWidth ? cursorCell - (innerWidth - 1) : 0;
+
+            // Drop chars from the start until we've passed viewStartTarget cells.
+            let charIdx = 0;
+            let viewStartCell = 0;
+            for (const ch of display) {
+                if (viewStartCell >= viewStartTarget) break;
+                viewStartCell += isFullwidth(ch.codePointAt(0)!) ? 2 : 1;
+                charIdx += ch.length;
+            }
+
+            // Take chars until we fill innerWidth cells.
+            let visible = "";
+            let visibleCells = 0;
+            let i = charIdx;
+            while (i < display.length) {
+                const code = display.codePointAt(i)!;
+                const w = isFullwidth(code) ? 2 : 1;
+                if (visibleCells + w > innerWidth) break;
+                const ch = String.fromCodePoint(code);
+                visible += ch;
+                visibleCells += w;
+                i += ch.length;
+            }
 
             const textStyles: AnsiStyles = {
                 color: style.color,
                 bgColor: style.backgroundColor,
             };
-            const textMatrix = RleMatrix.fromAscii(visible.padEnd(innerWidth, " "), textStyles);
-            composite.copyIn({ x: innerX, y: innerY }, textMatrix);
 
-            if (this.states.has("focus") && visibleCursor >= 0 && visibleCursor < innerWidth) {
-                const cursorChar = visible[visibleCursor] ?? " ";
-                const cursorStyles: AnsiStyles = {
-                    color: style.backgroundColor ?? "black",
-                    bgColor: style.color ?? "white",
-                };
-                const cursorMatrix = RleMatrix.fromAscii(cursorChar, cursorStyles);
-                composite.copyIn({ x: innerX + visibleCursor, y: innerY }, cursorMatrix);
+            composite.setText({ x: innerX, y: innerY }, visible, textStyles);
+
+            if (visibleCells < innerWidth) {
+                composite.setAscii(
+                    { x: innerX + visibleCells, y: innerY },
+                    " ".repeat(innerWidth - visibleCells),
+                    textStyles,
+                );
             }
+
+            this.#cursorOffset = null;
+            if (this.states.has("focus")) {
+                const cursorCellRel = cursorCell - viewStartCell;
+                if (cursorCellRel >= 0 && cursorCellRel < innerWidth) {
+                    const cursorCode = cursor < display.length ? display.codePointAt(cursor) : 0x20;
+                    const cursorChar = cursorCode === undefined ? " " : String.fromCodePoint(cursorCode);
+                    const cursorStyles: AnsiStyles = {
+                        color: style.backgroundColor ?? "black",
+                        bgColor: style.color ?? "white",
+                    };
+                    composite.setText({ x: innerX + cursorCellRel, y: innerY }, cursorChar, cursorStyles);
+                    this.#cursorOffset = { x: innerX + cursorCellRel, y: innerY };
+                }
+            }
+        } else {
+            this.#cursorOffset = null;
         }
 
         this.setCachedComposite(composite);
