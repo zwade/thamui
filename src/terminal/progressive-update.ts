@@ -67,8 +67,19 @@ export const generateProgressiveUpdates = (oldMatrix: RleMatrix | null, newMatri
     let result = "";
 
     for (let y = 0; y < newMatrix.height; y++) {
-        const oldCells = oldMatrix.getRow(y).toCells();
-        const newCells = newMatrix.getRow(y).toCells();
+        const oldRow = oldMatrix.getRow(y);
+        const newRow = newMatrix.getRow(y);
+
+        if (oldRow === newRow) {
+            continue;
+        }
+
+        if (oldRow.signature() === newRow.signature()) {
+            continue;
+        }
+
+        const oldCells = oldRow.toCells();
+        const newCells = newRow.toCells();
         const width = Math.min(oldCells.length, newCells.length);
 
         let i = 0;

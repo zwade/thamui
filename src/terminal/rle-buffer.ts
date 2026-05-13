@@ -117,6 +117,11 @@ export class Segment {
         }
         return result;
     }
+
+    public signature(): string {
+        const o = this.options;
+        return `${this.data}\x01${o.color ?? ""}\x01${o.bgColor ?? ""}\x01${o.bold ? 1 : 0}\x01${o.underline ? 1 : 0}\x01${o.strikethrough ? 1 : 0}\x01${this.characterWidth}\x01${this.width}`;
+    }
 }
 
 export interface Cell {
@@ -137,6 +142,7 @@ export class RleBuffer {
 
     #prefixDirty = true;
     #prefixSums!: number[];
+    #signature: string | null = null;
 
     public static fromSegments(segments: Segment[], options: RleBufferOptions = {}) {
         const length = segments.reduce((acc, seg) => acc + seg.size, 0);
@@ -242,6 +248,7 @@ export class RleBuffer {
         }
 
         this._write(index, data);
+        this.#signature = null;
 
         if (this.prefixSums.slice(-1)[0] !== this.length) {
             throw new Error("Something went wrong with rle buffer");
@@ -263,6 +270,18 @@ export class RleBuffer {
     public clear() {
         this.segments = [this.getEmpty(this.length)];
         this.#prefixDirty = true;
+        this.#signature = null;
+    }
+
+    public signature(): string {
+        if (this.#signature === null) {
+            const parts: string[] = [];
+            for (const segment of this.segments) {
+                parts.push(segment.signature());
+            }
+            this.#signature = parts.join("|");
+        }
+        return this.#signature;
     }
 
     public toString() {

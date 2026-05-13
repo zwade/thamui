@@ -305,23 +305,27 @@ export class TreeContext {
             }
         }
 
+        let hoverChanged = false;
         if (eventName === "mousemove") {
             const newMoveTargets = new Set<TerminalNode>(targets);
             for (const target of this.#hadMouseEntry) {
                 if (!newMoveTargets.has(target)) {
                     target.dispatchEvent("mouseleave");
+                    hoverChanged = true;
                 }
             }
 
             for (const target of newMoveTargets) {
                 if (!this.#hadMouseEntry.has(target)) {
                     target.dispatchEvent("mouseenter");
+                    hoverChanged = true;
                 }
             }
 
             this.#hadMouseEntry = newMoveTargets;
         }
 
-        return { handled, dirty: true };
+        const dirty = eventName !== "mousemove" || hoverChanged || handled;
+        return { handled, dirty };
     }
 }
