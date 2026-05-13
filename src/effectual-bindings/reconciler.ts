@@ -38,103 +38,126 @@ export interface ReconciliationOptions {
     stderr?: Writable;
 }
 
-const buildReconciliationLoop = async (App: () => EffectualElement, options: ReconciliationOptions = {}) => {
+const buildReconciliationLoop = (App: () => EffectualElement, options: ReconciliationOptions = {}): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+        const stdin = options.stdin ?? process.stdin;
+        const stdout = options.stdout ?? process.stdout;
+
+        const rootElement = new Block("root");
+        const treeContext = new TreeContext(rootElement);
+        rootElement.onAttach(treeContext, null);
+
+        const root = {
+            kind: "root",
+            node: rootElement,
+        } satisfies RootHydrate;
+
+        const target = new TerminalTarget();
+
+        let lastPass: ExpansionEntry | undefined = undefined;
+        let lastReconciliation: ReconciliationChild[] | undefined = undefined;
+        let lastMatrix: RleMatrix | null = null;
+
+        const yOffset = debugMode ? 10 : 0;
+        treeContext.offsetY = yOffset;
+
+        let terminalSize: Point = { x: stdout.columns, y: stdout.rows - yOffset };
+        let forceReflow = false;
+        let stopped = false;
+        let intervalHandle: NodeJS.Timeout | null = null;
+
+        !debugMode && stdout.write("\x1b[2J\x1b[1;1H\x1b[?1003h\x1b[?1006h\x1b[?2004h\x1b[?25l");
+        debugMode === "loop" && stdout.write("\x1b[?1003h\x1b[?1006h\x1b[?2004h");
+
+        stdin.setRawMode(true);
+
+        const cleanup = () => {
+            if (stopped) return;
+            stopped = true;
+
+            if (intervalHandle) {
+                clearInterval(intervalHandle);
+                intervalHandle = null;
+            }
+        };
+
+        stdin.on("data", (sequence) => {
+            if (stopped) return;
+
+            const asString = sequence.toString();
+            if (asString === "\x1b" || asString === "\x03" || asString === "\x1c") {
+                cleanup();
+                resolve();
+                return;
+            }
+
+            const { dirty } = treeContext.dispatchTerminalSequence(sequence);
+
+            if (dirty) {
+                forceReflow = true;
+            }
+        });
+
+        stdout.on("resize", () => {
+            if (stopped) return;
+
+            terminalSize = { x: stdout.columns, y: stdout.rows };
+            lastMatrix = null;
+            forceReflow = true;
+        });
+
+        const reReconcile = () => {
+            if (stopped) return;
+
+            try {
+                if (!forceReflow && lastPass && !globalThis.__effectual__.isDirty) {
+                    return;
+                }
+
+                const nextPass = expand(F._jsx(App, {}), lastPass);
+                const nextReconciliation = reconcile(nextPass, root, target, lastReconciliation);
+
+                lastPass = nextPass;
+                lastReconciliation = nextReconciliation;
+
+                debugMode || stdout.write("\x1b[?1003h");
+
+                rootElement.pushStyles({ style: {}, styleMap: loadStyles(userAgent) }, { index: 0, outOf: 1 });
+                rootElement.layout({ force: true });
+                const yogaRoot = rootElement.allocateYoga();
+                yogaRoot.calculateLayout(terminalSize.x, terminalSize.y, Direction.LTR);
+
+                const mat = new RleMatrix(terminalSize.x, terminalSize.y);
+                rootElement.render(mat, { x: 0, y: 0 });
+
+                const updates = generateProgressiveUpdates(lastMatrix, mat);
+                if (updates.length > 0) {
+                    stdout.write(updates);
+                }
+
+                lastMatrix = mat;
+                forceReflow = false;
+            } catch (err) {
+                cleanup();
+                reject(err);
+            }
+        };
+
+        if (debugMode === "static") {
+            reReconcile();
+        } else {
+            intervalHandle = setInterval(reReconcile, refreshRate);
+        }
+    });
+
+export const mount = (App: () => EffectualElement, options: ReconciliationOptions = {}): Promise<void> => {
     const stdin = options.stdin ?? process.stdin;
     const stdout = options.stdout ?? process.stdout;
-    const stderr = options.stderr ?? process.stderr;
 
-    const rootElement = new Block("root");
-    const treeContext = new TreeContext(rootElement);
-    rootElement.onAttach(treeContext, null);
-
-    const root = {
-        kind: "root",
-        node: rootElement,
-    } satisfies RootHydrate;
-
-    const target = new TerminalTarget();
-
-    let lastPass: ExpansionEntry | undefined = undefined;
-    let lastReconciliation: ReconciliationChild[] | undefined = undefined;
-    let lastMatrix: RleMatrix | null = null;
-
-    const yOffset = debugMode ? 10 : 0;
-    treeContext.offsetY = yOffset;
-
-    let terminalSize: Point = { x: stdout.columns, y: stdout.rows - yOffset };
-    let forceReflow = false;
-
-    !debugMode && stdout.write("\x1b[2J\x1b[1;1H\x1b[?1003h\x1b[?25l");
-    debugMode === "loop" && stdout.write("\x1b[?1003h");
-
-    stdin.setRawMode(true);
-    stdin.on("data", (sequence) => {
-        const asString = sequence.toString();
-        if (asString === "\x1b" || asString === "\x03" || asString === "\x1c") {
-            stdout.write("\x1b[?1000l");
-            process.exit(0);
-        }
-
-        const { dirty } = treeContext.dispatchTerminalSequence(sequence);
-
-        if (dirty) {
-            forceReflow = true;
-        }
-    });
-
-    stdout.on("resize", () => {
-        terminalSize = { x: stdout.columns, y: stdout.rows };
-        lastMatrix = null;
-        forceReflow = true;
-    });
-
-    const reReconcile = () => {
-        if (!forceReflow && lastPass && !globalThis.__effectual__.isDirty) {
-            return;
-        }
-
-        const nextPass = expand(F._jsx(App, {}), lastPass);
-        const nextReconciliation = reconcile(nextPass, root, target, lastReconciliation);
-
-        lastPass = nextPass;
-        lastReconciliation = nextReconciliation;
-
-        debugMode || stdout.write("\x1b[?1003h");
-
-        rootElement.pushStyles({ style: {}, styleMap: loadStyles(userAgent) }, { index: 0, outOf: 1 });
-        rootElement.layout({ force: true });
-        const yogaRoot = rootElement.allocateYoga();
-        yogaRoot.calculateLayout(terminalSize.x, terminalSize.y, Direction.LTR);
-
-        const mat = new RleMatrix(terminalSize.x, terminalSize.y);
-        rootElement.render(mat, { x: 0, y: 0 });
-
-        const updates = generateProgressiveUpdates(lastMatrix, mat);
-        if (updates.length > 0) {
-            stdout.write(updates);
-        }
-
-        lastMatrix = mat;
-        forceReflow = false;
+    const clear = () => {
+        stdin.setRawMode(false);
+        stdout.write("\x1b[?1000l\x1b[?1006l\x1b[?2004l\x1b[?25h\x1b[2J\x1b[1;1H");
     };
 
-    if (debugMode === "static") {
-        reReconcile();
-    } else {
-        setInterval(() => reReconcile(), refreshRate);
-    }
-};
-
-export const mount = (App: () => EffectualElement, options: ReconciliationOptions = {}) => {
-    const stdout = options.stdout ?? process.stdout;
-    const stderr = options.stderr ?? (process.stderr as Writable);
-
-    process.on("uncaughtException", (err) => {
-        debugMode || stdout.write("\x1b[?1000l\x1b[?25h");
-
-        stderr.write(String(err) + "\n");
-        process.exit(1);
-    });
-
-    buildReconciliationLoop(App, options);
+    return buildReconciliationLoop(App, options).then(clear, clear);
 };

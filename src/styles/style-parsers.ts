@@ -196,7 +196,7 @@ export const alignItems = (val: string | undefined): Align => {
             spaceAround: Align.SpaceAround,
             spaceEvenly: Align.SpaceEvenly,
             auto: Align.Auto,
-        }[val || ""] ?? Align.FlexStart
+        }[val || ""] ?? Align.Stretch
     );
 };
 
@@ -286,7 +286,6 @@ export const applyFourSize = <T>(fn: (edge: Edge, value: T) => void, fourSize: F
 export const applyStyles = (node: YogaNode, styles: StyleRecord) => {
     node.setWidth(measureWithAuto(styles["width"]));
     node.setHeight(measureWithAuto(styles["height"]));
-    node.setBoxSizing(BoxSizing.ContentBox);
 
     node.setMinWidth(measureWithPercent(styles["minWidth"]));
     node.setMinHeight(measureWithPercent(styles["minHeight"]));

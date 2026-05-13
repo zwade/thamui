@@ -62,6 +62,13 @@ export class TextInput extends TerminalContent {
                 changed = this.#buffer.backspace();
                 break;
             }
+            case "Paste": {
+                const text = (event.text ?? "").replace(/[\r\n]+/g, " ");
+                if (text.length > 0) {
+                    changed = this.#buffer.insert(text);
+                }
+                break;
+            }
             default: {
                 if (event.ctrl) {
                     return { handled: false };

@@ -172,6 +172,13 @@ export class TextArea extends TerminalContent {
                 changed = this.#buffer.insert("\n");
                 break;
             }
+            case "Paste": {
+                const text = (event.text ?? "").replace(/\r\n?/g, "\n");
+                if (text.length > 0) {
+                    changed = this.#buffer.insert(text);
+                }
+                break;
+            }
             default: {
                 if (event.ctrl) {
                     return { handled: false };

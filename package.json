@@ -1,6 +1,6 @@
 {
   "name": "thamui",
-  "version": "0.1.1",
+  "version": "0.2.4",
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -22,7 +22,7 @@
     "@types/node": "^22.15.3",
     "chalk": "^5.4.1",
     "css": "^3.0.0",
-    "effectual": "^1.1.3",
+    "effectual": "^1.1.4",
     "sass": "^1.87.0",
     "ssh2": "^1.16.0",
     "yoga-layout": "^3.2.1"

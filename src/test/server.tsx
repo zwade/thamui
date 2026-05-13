@@ -64,7 +64,15 @@ export const startServer = async (port: number) => {
                         },
                     };
 
-                    mount(App, { stdout: stdout, stdin: stdin, stderr: stream.stderr });
+                    mount(App, { stdout: stdout, stdin: stdin, stderr: stream.stderr }).then(
+                        () => {
+                            client.end();
+                        },
+                        (err) => {
+                            console.error("Error during reconciliation:", err);
+                            client.end();
+                        },
+                    );
                 });
             });
         });
