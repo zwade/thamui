@@ -237,6 +237,10 @@ export class RleBuffer {
     }
 
     public write(index: number, data: Segment) {
+        if (data.size === 0) {
+            return;
+        }
+
         this._write(index, data);
 
         if (this.prefixSums.slice(-1)[0] !== this.length) {

@@ -13,7 +13,7 @@ import { Box, FourSize, Point } from "./utils.js";
 
 export interface Drawable {
     layout(options?: { force?: boolean }): void;
-    render(rleMatrix: RleMatrix, start: Point): void;
+    render(): RleMatrix;
     pushStyles(styleData: Styles.LocalStyleData, parentContext: Selector.ParentContext): void;
 
     probe(position: Point): TerminalNode[];
@@ -204,6 +204,8 @@ export class TerminalContent extends YogaBase implements Drawable {
 
     #layoutDirty: boolean = true;
     #stylesDirty: boolean = true;
+    #renderDirty: boolean = true;
+    #cachedComposite: RleMatrix | null = null;
     #recomputeTimer: NodeJS.Timeout | null = null;
     #lastParentStyles: Styles.LocalStyleData | null = null;
     #lastParentContextIndex: number | undefined = undefined;
@@ -249,10 +251,33 @@ export class TerminalContent extends YogaBase implements Drawable {
     protected markDirty() {
         this.#layoutDirty = true;
         this.#stylesDirty = true;
+        this.markRenderDirty();
 
         if (!this.#recomputeTimer) {
             this.#recomputeTimer = setTimeout(() => this.recomputeStyles(), 1);
         }
+    }
+
+    public markRenderDirty(): void {
+        if (this.#renderDirty) {
+            return;
+        }
+
+        this.#renderDirty = true;
+        this.parent?.markRenderDirty();
+    }
+
+    protected get renderDirty(): boolean {
+        return this.#renderDirty;
+    }
+
+    protected get cachedComposite(): RleMatrix | null {
+        return this.#cachedComposite;
+    }
+
+    protected setCachedComposite(matrix: RleMatrix) {
+        this.#cachedComposite = matrix;
+        this.#renderDirty = false;
     }
 
     // Public methods
@@ -445,6 +470,7 @@ export class TerminalContent extends YogaBase implements Drawable {
                 applyStyles(node, computed);
                 this.#lastAppliedStyles = computed;
             }
+
             this.recomputeLayout();
             this.#layoutDirty = false;
         }
@@ -500,6 +526,7 @@ export class TerminalContent extends YogaBase implements Drawable {
             this.#lastParentContextIndex = this.parentContext.index;
             this.#lastParentContextOutOf = this.parentContext.outOf;
             this.#layoutDirty = true;
+            this.#renderDirty = true;
         }
 
         for (let i = 0; i < this.children.length; i++) {
@@ -509,8 +536,9 @@ export class TerminalContent extends YogaBase implements Drawable {
 
     // Implemented by inheriting classes
 
-    public render(_matrix: RleMatrix, _start: Point) {
-        return;
+    public render(): RleMatrix {
+        const bounds = this.computedPosition.position;
+        return new RleMatrix(bounds.width, bounds.height);
     }
 }
 
@@ -576,6 +604,8 @@ export class TerminalText extends YogaBase implements Drawable {
     protected parentStyles: Styles.LocalStyleData | null = null;
 
     #textContent: string | null;
+    #renderDirty: boolean = true;
+    #cachedMatrix: RleMatrix | null = null;
 
     public get textContent(): string | null {
         return this.#textContent;
@@ -588,6 +618,12 @@ export class TerminalText extends YogaBase implements Drawable {
 
         this.#textContent = value;
         this.allocateYoga().markDirty();
+        this.#markDirty();
+    }
+
+    #markDirty() {
+        this.#renderDirty = true;
+        this.parent?.markRenderDirty();
     }
 
     constructor(textContent: string) {
@@ -627,20 +663,35 @@ export class TerminalText extends YogaBase implements Drawable {
         this.parent = null;
     }
 
-    public render(matrix: RleMatrix, start: Point) {
+    public render(): RleMatrix {
+        const bounds = this.computedPosition.position;
+
+        const sizeMatches =
+            this.#cachedMatrix !== null &&
+            this.#cachedMatrix.width === bounds.width &&
+            this.#cachedMatrix.height === bounds.height;
+
+        if (sizeMatches && !this.#renderDirty) {
+            return this.#cachedMatrix!;
+        }
+
+        const matrix = new RleMatrix(bounds.width, bounds.height);
         const text = this.#textContent ?? "";
-        if (text.length === 0) {
-            return;
+
+        if (text.length > 0) {
+            const computedWidth = Math.max(1, Math.floor(bounds.width));
+            const color = this.parentStyles?.style?.color;
+            const bgColor = this.parentStyles?.style?.backgroundColor;
+            const lines = wrapWords(text, computedWidth);
+
+            for (let i = 0; i < lines.length; i++) {
+                matrix.setAscii({ x: 0, y: i }, lines[i], { color, bgColor });
+            }
         }
 
-        const computedWidth = Math.max(1, Math.floor(this.computedPosition.position.width));
-        const color = this.parentStyles?.style?.color;
-        const bgColor = this.parentStyles?.style?.backgroundColor;
-        const lines = wrapWords(text, computedWidth);
-
-        for (let i = 0; i < lines.length; i++) {
-            matrix.setAscii({ x: start.x, y: start.y + i }, lines[i], { color, bgColor });
-        }
+        this.#cachedMatrix = matrix;
+        this.#renderDirty = false;
+        return matrix;
     }
 
     public dispatchEvent(_eventName: string) {
@@ -657,7 +708,10 @@ export class TerminalText extends YogaBase implements Drawable {
     }
 
     public pushStyles(styles: Styles.LocalStyleData) {
-        this.parentStyles = styles;
+        if (this.parentStyles !== styles) {
+            this.parentStyles = styles;
+            this.#markDirty();
+        }
     }
 }
 

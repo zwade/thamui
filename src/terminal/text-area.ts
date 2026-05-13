@@ -3,7 +3,6 @@ import { AnsiStyles, RleMatrix } from "./rle-buffer.js";
 import { SplitBuffer } from "./split-buffer.js";
 import { TerminalContent } from "./terminal-nodes.js";
 import { KeyEvent } from "./tree-context.js";
-import { Point } from "./utils.js";
 
 const computeVisualLines = (text: string, width: number): string[] => {
     if (width <= 0) {
@@ -200,18 +199,22 @@ export class TextArea extends TerminalContent {
         return { handled: true };
     }
 
-    public render(matrix: RleMatrix, start: Point) {
+    public render(): RleMatrix {
+        const bounds = this.computedPosition.position;
+
+        if (!this.renderDirty) {
+            return this.cachedComposite!;
+        }
+
         const style = this.computedStyles;
         const generalStyles: AnsiStyles = { bgColor: style.backgroundColor };
-        const boundingRect = this.computedPosition.position;
+        const composite = new RleMatrix(bounds.width, bounds.height, undefined, generalStyles);
 
-        const baseMatrix = new RleMatrix(boundingRect.width, boundingRect.height, undefined, generalStyles);
-
-        drawBorder(style, this.parentStyles, boundingRect, baseMatrix);
+        drawBorder(style, this.parentStyles, bounds, composite);
 
         const contentArea = this.computedPosition.contentArea;
-        const innerX = contentArea.x - boundingRect.x;
-        const innerY = contentArea.y - boundingRect.y;
+        const innerX = contentArea.x - bounds.x;
+        const innerY = contentArea.y - bounds.y;
         const innerWidth = Math.max(0, contentArea.width);
         const innerHeight = Math.max(0, contentArea.height);
 
@@ -235,7 +238,7 @@ export class TextArea extends TerminalContent {
 
                 const line = lines[lineIdx].padEnd(innerWidth, " ");
                 const lineMatrix = RleMatrix.fromAscii(line, textStyles);
-                baseMatrix.copyIn({ x: innerX, y: innerY + i }, lineMatrix);
+                composite.copyIn({ x: innerX, y: innerY + i }, lineMatrix);
             }
 
             if (this.states.has("focus")) {
@@ -248,13 +251,13 @@ export class TextArea extends TerminalContent {
                         bgColor: style.color ?? "white",
                     };
                     const cursorMatrix = RleMatrix.fromAscii(cursorChar, cursorStyles);
-                    baseMatrix.copyIn({ x: innerX + cursorPos.col, y: innerY + visualRow }, cursorMatrix);
+                    composite.copyIn({ x: innerX + cursorPos.col, y: innerY + visualRow }, cursorMatrix);
                 }
             }
         }
 
-        matrix.copyIn(start, baseMatrix);
-        return baseMatrix;
+        this.setCachedComposite(composite);
+        return composite;
     }
 
     #moveUp(width: number): boolean {

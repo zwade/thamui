@@ -10,31 +10,28 @@ export interface RenderResult {
 }
 
 export class Block extends TerminalContent {
-    public render(matrix: RleMatrix, start: Point) {
-        const style = this.computedStyles;
+    public render(): RleMatrix {
+        const bounds = this.computedPosition.position;
 
+        if (!this.renderDirty) {
+            return this.cachedComposite!;
+        }
+
+        const style = this.computedStyles;
         const generalStyles = {
             bgColor: style.backgroundColor,
         } satisfies AnsiStyles;
 
-        const boundingRect = this.computedPosition.position;
-
-        const baseMatrix = new RleMatrix(boundingRect.width, boundingRect.height, undefined, generalStyles);
-
-        drawBorder(style, this.parentStyles, boundingRect, baseMatrix);
-
-        matrix.copyIn(start, baseMatrix);
+        const composite = new RleMatrix(bounds.width, bounds.height, undefined, generalStyles);
+        drawBorder(style, this.parentStyles, bounds, composite);
 
         for (const child of this.children) {
-            const offsetPoint = {
-                x: start.x + child.computedPosition.position.x,
-                y: start.y + child.computedPosition.position.y,
-            };
-
-            child.render(matrix, offsetPoint);
+            const childPos = child.computedPosition.position;
+            composite.copyIn({ x: childPos.x, y: childPos.y }, child.render());
         }
 
-        return baseMatrix;
+        this.setCachedComposite(composite);
+        return composite;
     }
 }
 

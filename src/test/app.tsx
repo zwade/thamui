@@ -44,7 +44,7 @@ export const App = () => {
                     </button>
                 </div>
 
-                <div class="status">{status.getValue()}</div>
+                {status.getValue() ? <div class="status">{status.getValue()}</div> : null}
             </div>
         </div>
     );

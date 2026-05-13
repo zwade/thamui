@@ -3,7 +3,6 @@ import { AnsiStyles, RleMatrix } from "./rle-buffer.js";
 import { SplitBuffer } from "./split-buffer.js";
 import { TerminalContent } from "./terminal-nodes.js";
 import { KeyEvent } from "./tree-context.js";
-import { Point } from "./utils.js";
 
 export class TextInput extends TerminalContent {
     public isSelectable = true;
@@ -90,18 +89,22 @@ export class TextInput extends TerminalContent {
         return { handled: true };
     }
 
-    public render(matrix: RleMatrix, start: Point) {
+    public render(): RleMatrix {
+        const bounds = this.computedPosition.position;
+
+        if (!this.renderDirty) {
+            return this.cachedComposite!;
+        }
+
         const style = this.computedStyles;
         const generalStyles: AnsiStyles = { bgColor: style.backgroundColor };
-        const boundingRect = this.computedPosition.position;
+        const composite = new RleMatrix(bounds.width, bounds.height, undefined, generalStyles);
 
-        const baseMatrix = new RleMatrix(boundingRect.width, boundingRect.height, undefined, generalStyles);
-
-        drawBorder(style, this.parentStyles, boundingRect, baseMatrix);
+        drawBorder(style, this.parentStyles, bounds, composite);
 
         const contentArea = this.computedPosition.contentArea;
-        const innerX = contentArea.x - boundingRect.x;
-        const innerY = contentArea.y - boundingRect.y;
+        const innerX = contentArea.x - bounds.x;
+        const innerY = contentArea.y - bounds.y;
         const innerWidth = Math.max(0, contentArea.width);
 
         if (innerWidth > 0) {
@@ -118,7 +121,7 @@ export class TextInput extends TerminalContent {
                 bgColor: style.backgroundColor,
             };
             const textMatrix = RleMatrix.fromAscii(visible.padEnd(innerWidth, " "), textStyles);
-            baseMatrix.copyIn({ x: innerX, y: innerY }, textMatrix);
+            composite.copyIn({ x: innerX, y: innerY }, textMatrix);
 
             if (this.states.has("focus") && visibleCursor >= 0 && visibleCursor < innerWidth) {
                 const cursorChar = visible[visibleCursor] ?? " ";
@@ -127,12 +130,11 @@ export class TextInput extends TerminalContent {
                     bgColor: style.color ?? "white",
                 };
                 const cursorMatrix = RleMatrix.fromAscii(cursorChar, cursorStyles);
-                baseMatrix.copyIn({ x: innerX + visibleCursor, y: innerY }, cursorMatrix);
+                composite.copyIn({ x: innerX + visibleCursor, y: innerY }, cursorMatrix);
             }
         }
 
-        matrix.copyIn(start, baseMatrix);
-
-        return baseMatrix;
+        this.setCachedComposite(composite);
+        return composite;
     }
 }

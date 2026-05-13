@@ -19,8 +19,8 @@ const rootContext = { index: 0, outOf: 1 };
 
 const refreshRate = 1_000 / 16; // 16 fps
 
-type DebugMode = false | "static" | "loop";
-const debugMode = false as DebugMode;
+type DebugMode = false | "static" | "loop" | "timing";
+const debugMode = "timing" as DebugMode;
 
 export interface StdoutPtyLike {
     columns: number;
@@ -44,6 +44,7 @@ const buildReconciliationLoop = (App: () => EffectualElement, options: Reconcili
     new Promise<void>((resolve, reject) => {
         const stdin = options.stdin ?? process.stdin;
         const stdout = options.stdout ?? process.stdout;
+        const stderr = options.stderr ?? (process.stderr as Writable);
 
         const rootElement = new Block("root");
         const treeContext = new TreeContext(rootElement);
@@ -60,7 +61,8 @@ const buildReconciliationLoop = (App: () => EffectualElement, options: Reconcili
         let lastReconciliation: ReconciliationChild[] | undefined = undefined;
         let lastMatrix: RleMatrix | null = null;
 
-        const yOffset = debugMode ? 10 : 0;
+        const isVisualDebug = debugMode === "static" || debugMode === "loop";
+        const yOffset = isVisualDebug ? 10 : 0;
         treeContext.offsetY = yOffset;
 
         let terminalSize: Point = { x: stdout.columns, y: stdout.rows - yOffset };
@@ -68,7 +70,7 @@ const buildReconciliationLoop = (App: () => EffectualElement, options: Reconcili
         let stopped = false;
         let intervalHandle: NodeJS.Timeout | null = null;
 
-        !debugMode && stdout.write("\x1b[2J\x1b[1;1H\x1b[?1003h\x1b[?1006h\x1b[?2004h\x1b[?25l");
+        !isVisualDebug && stdout.write("\x1b[2J\x1b[1;1H\x1b[?1003h\x1b[?1006h\x1b[?2004h\x1b[?25l");
         debugMode === "loop" && stdout.write("\x1b[?1003h\x1b[?1006h\x1b[?2004h");
 
         stdin.setRawMode(true);
@@ -116,30 +118,52 @@ const buildReconciliationLoop = (App: () => EffectualElement, options: Reconcili
                     return;
                 }
 
+                const timings: [string, number][] = [];
+                debugMode === "timing" && timings.push(["start", performance.now()]);
+
                 const nextPass = expand(F._jsx(App, {}), lastPass);
+                debugMode === "timing" && timings.push(["expand", performance.now()]);
+
                 const nextReconciliation = reconcile(nextPass, root, target, lastReconciliation);
+                debugMode === "timing" && timings.push(["reconcile", performance.now()]);
 
                 lastPass = nextPass;
                 lastReconciliation = nextReconciliation;
 
-                debugMode || stdout.write("\x1b[?1003h");
+                isVisualDebug || stdout.write("\x1b[?1003h");
 
                 rootElement.pushStyles(userAgentStyles, rootContext);
                 rootElement.layout();
+                debugMode === "timing" && timings.push(["layout", performance.now()]);
+
                 const yogaRoot = rootElement.allocateYoga();
                 yogaRoot.calculateLayout(terminalSize.x, terminalSize.y, Direction.LTR);
+                debugMode === "timing" && timings.push(["yoga", performance.now()]);
 
-                const mat = new RleMatrix(terminalSize.x, terminalSize.y);
-                rootElement.render(mat, { x: 0, y: 0 });
+                const mat = rootElement.render();
+                debugMode === "timing" && timings.push(["render", performance.now()]);
 
                 const updates = generateProgressiveUpdates(lastMatrix, mat);
+                debugMode === "timing" && timings.push(["updates", performance.now()]);
+
                 if (updates.length > 0) {
                     stdout.write(updates);
+                }
+
+                debugMode === "timing" && timings.push(["flush", performance.now()]);
+
+                if (debugMode === "timing") {
+                    for (let i = 0; i < timings.length - 1; i++) {
+                        const [startLabel, time] = timings[i];
+                        const [nextLabel, nextTime] = timings[i + 1];
+                        console.log(`${startLabel} -> ${nextLabel}: ${(nextTime - time).toFixed(2)}ms`);
+                    }
                 }
 
                 lastMatrix = mat;
                 forceReflow = false;
             } catch (err) {
+                console.error(`Error during reconciliation: ${String(err)}\n`);
                 cleanup();
                 reject(err);
             }
