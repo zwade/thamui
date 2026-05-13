@@ -14,6 +14,8 @@ import { TerminalTarget } from "./terminal-target.js";
 import userAgentString from "../../styles/user-agent-styles.scss";
 
 const userAgent = JSON.parse(userAgentString) as ParsedStyle[];
+const userAgentStyles = { style: {}, styleMap: loadStyles(userAgent) };
+const rootContext = { index: 0, outOf: 1 };
 
 const refreshRate = 1_000 / 16; // 16 fps
 
@@ -122,8 +124,8 @@ const buildReconciliationLoop = (App: () => EffectualElement, options: Reconcili
 
                 debugMode || stdout.write("\x1b[?1003h");
 
-                rootElement.pushStyles({ style: {}, styleMap: loadStyles(userAgent) }, { index: 0, outOf: 1 });
-                rootElement.layout({ force: true });
+                rootElement.pushStyles(userAgentStyles, rootContext);
+                rootElement.layout();
                 const yogaRoot = rootElement.allocateYoga();
                 yogaRoot.calculateLayout(terminalSize.x, terminalSize.y, Direction.LTR);
 

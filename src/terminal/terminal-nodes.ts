@@ -203,7 +203,12 @@ export class TerminalContent extends YogaBase implements Drawable {
     protected states: Set<Selector.State> = new Set();
 
     #layoutDirty: boolean = true;
+    #stylesDirty: boolean = true;
     #recomputeTimer: NodeJS.Timeout | null = null;
+    #lastParentStyles: Styles.LocalStyleData | null = null;
+    #lastParentContextIndex: number | undefined = undefined;
+    #lastParentContextOutOf: number | undefined = undefined;
+    #lastAppliedStyles: Styles.Style | null = null;
 
     constructor(tagName: string) {
         super();
@@ -243,6 +248,7 @@ export class TerminalContent extends YogaBase implements Drawable {
 
     protected markDirty() {
         this.#layoutDirty = true;
+        this.#stylesDirty = true;
 
         if (!this.#recomputeTimer) {
             this.#recomputeTimer = setTimeout(() => this.recomputeStyles(), 1);
@@ -263,9 +269,9 @@ export class TerminalContent extends YogaBase implements Drawable {
 
             this.allocateYoga().insertChild(node.allocateYoga(), this.children.length);
             this.children.push(node);
-
-            this.markDirty();
         }
+
+        this.markDirty();
 
         if (this.treeContext) {
             node.onAttach(this.treeContext, this);
@@ -432,15 +438,16 @@ export class TerminalContent extends YogaBase implements Drawable {
             `Yoga node child count mismatch (${this.allocateYoga().getChildCount()} != ${this.children.length})`,
         );
 
-        if (!this.#layoutDirty && !options?.force) {
-            return;
+        if (this.#layoutDirty || options?.force) {
+            const node = this.allocateYoga();
+            const computed = this.computedStyles;
+            if (computed !== this.#lastAppliedStyles || options?.force) {
+                applyStyles(node, computed);
+                this.#lastAppliedStyles = computed;
+            }
+            this.recomputeLayout();
+            this.#layoutDirty = false;
         }
-
-        const node = this.allocateYoga();
-        applyStyles(node, this.computedStyles);
-        this.recomputeLayout();
-
-        this.#layoutDirty = false;
 
         for (const child of this.children) {
             child.layout(options);
@@ -460,29 +467,43 @@ export class TerminalContent extends YogaBase implements Drawable {
             return;
         }
 
-        let parentStyles = this.rawParentStyles;
-        if (this.rawStylesheet !== null) {
-            parentStyles = {
-                style: parentStyles.style,
-                styleMap: mergeStyles(parentStyles.styleMap, this.rawStylesheet),
-            };
+        const inputsUnchanged =
+            !this.#stylesDirty &&
+            this.rawParentStyles === this.#lastParentStyles &&
+            this.parentContext.index === this.#lastParentContextIndex &&
+            this.parentContext.outOf === this.#lastParentContextOutOf;
+
+        if (!inputsUnchanged) {
+            let parentStyles = this.rawParentStyles;
+            if (this.rawStylesheet !== null) {
+                parentStyles = {
+                    style: parentStyles.style,
+                    styleMap: mergeStyles(parentStyles.styleMap, this.rawStylesheet),
+                };
+            }
+
+            this.localStyles = propagateStyles(
+                parentStyles,
+                this.selector,
+                {
+                    ...this.parentContext,
+                    hasChildren: this.children.length !== 0,
+                    states: [...this.states],
+                },
+                {
+                    overrides: this.style as any as Styles.Style,
+                },
+            );
+
+            this.#stylesDirty = false;
+            this.#lastParentStyles = this.rawParentStyles;
+            this.#lastParentContextIndex = this.parentContext.index;
+            this.#lastParentContextOutOf = this.parentContext.outOf;
+            this.#layoutDirty = true;
         }
 
-        this.localStyles = propagateStyles(
-            parentStyles,
-            this.selector,
-            {
-                ...this.parentContext,
-                hasChildren: this.children.length !== 0,
-                states: [...this.states],
-            },
-            {
-                overrides: this.style as any as Styles.Style,
-            },
-        );
-
         for (let i = 0; i < this.children.length; i++) {
-            this.children[i].pushStyles(this.localStyles, { index: i, outOf: this.children.length });
+            this.children[i].pushStyles(this.localStyles!, { index: i, outOf: this.children.length });
         }
     }
 

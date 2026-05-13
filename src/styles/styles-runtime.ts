@@ -3,6 +3,16 @@ import { Map, Set } from "immutable";
 import { Selector } from "./selector.js";
 import type { ParsedStyle } from "./styles.js";
 
+const parsedSelectorCache = new globalThis.Map<string, Selector>();
+const cachedParse = (selectorString: string): Selector => {
+    let parsed = parsedSelectorCache.get(selectorString);
+    if (parsed === undefined) {
+        parsed = Selector.parse(selectorString);
+        parsedSelectorCache.set(selectorString, parsed);
+    }
+    return parsed;
+};
+
 export namespace Styles {
     export type StyleMap = Map<string, { styles: Styles; subselectors: StyleMap; specificity: number }>;
     export type Style = Record<string, string>;
@@ -84,7 +94,7 @@ export const propagateStyles = (
         }, {} as Styles.Style);
 
     const relevant = parentData.styleMap
-        .filter((_, selectorString) => Selector.matches(selector, Selector.parse(selectorString), context))
+        .filter((_, selectorString) => Selector.matches(selector, cachedParse(selectorString), context))
         .sort(({ specificity: sA }, { specificity: sB }) => sA - sB)
         .reduce(
             ([map, styles], value, _key) =>
