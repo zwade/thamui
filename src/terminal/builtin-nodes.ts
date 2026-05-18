@@ -13,7 +13,7 @@ export class Block extends TerminalContent {
     public render(): RleMatrix {
         const bounds = this.computedPosition.position;
 
-        if (!this.renderDirty) {
+        if (!this.needsRerender()) {
             return this.cachedComposite!;
         }
 

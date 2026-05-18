@@ -252,7 +252,7 @@ export class TextArea extends TerminalContent {
     public render(): RleMatrix {
         const bounds = this.computedPosition.position;
 
-        if (!this.renderDirty) {
+        if (!this.needsRerender()) {
             return this.cachedComposite!;
         }
 
@@ -309,11 +309,7 @@ export class TextArea extends TerminalContent {
                         color: style.backgroundColor ?? "black",
                         bgColor: style.color ?? "white",
                     };
-                    composite.setText(
-                        { x: innerX + cursorPos.col, y: innerY + visualRow },
-                        cursorChar,
-                        cursorStyles,
-                    );
+                    composite.setText({ x: innerX + cursorPos.col, y: innerY + visualRow }, cursorChar, cursorStyles);
                     this.#cursorOffset = { x: innerX + cursorPos.col, y: innerY + visualRow };
                 }
             }

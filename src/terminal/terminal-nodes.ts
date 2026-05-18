@@ -112,6 +112,8 @@ export class YogaBase {
             yogaNode.setMeasureFunc(this.#measureFunc);
         }
 
+        this.recomputeLayout();
+
         return yogaNode;
     }
 
@@ -267,12 +269,22 @@ export class TerminalContent extends YogaBase implements Drawable {
         this.parent?.markRenderDirty();
     }
 
-    protected get renderDirty(): boolean {
-        return this.#renderDirty;
-    }
-
     protected get cachedComposite(): RleMatrix | null {
         return this.#cachedComposite;
+    }
+
+    protected needsRerender(): boolean {
+        if (!this.#cachedComposite) {
+            return this.#renderDirty;
+        }
+
+        // We need to check if the layout of an adjacent entity has changed in a way that would affect the size of this entity
+        // even if the styles haven't changed.
+        const bounds = this.computedPosition.position;
+        const sizeMatches =
+            this.#cachedComposite.width === bounds.width && this.#cachedComposite.height === bounds.height;
+
+        return !sizeMatches || this.#renderDirty;
     }
 
     protected setCachedComposite(matrix: RleMatrix) {
@@ -622,7 +634,6 @@ export class TerminalText extends YogaBase implements Drawable {
         }
 
         this.#textContent = value;
-        this.allocateYoga().markDirty();
         this.#markDirty();
     }
 
@@ -680,13 +691,13 @@ export class TerminalText extends YogaBase implements Drawable {
             return this.#cachedMatrix!;
         }
 
-        const matrix = new RleMatrix(bounds.width, bounds.height);
+        const color = this.parentStyles?.style?.color;
+        const bgColor = this.parentStyles?.style?.backgroundColor;
+        const matrix = new RleMatrix(bounds.width, bounds.height, undefined, { bgColor });
         const text = this.#textContent ?? "";
 
         if (text.length > 0) {
             const computedWidth = Math.max(1, Math.floor(bounds.width));
-            const color = this.parentStyles?.style?.color;
-            const bgColor = this.parentStyles?.style?.backgroundColor;
             const lines = wrapWords(text, computedWidth);
 
             for (let i = 0; i < lines.length; i++) {

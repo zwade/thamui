@@ -1029,12 +1029,11 @@ __metadata:
   languageName: node
   linkType: hard
 
-"effectual@npm:^1.1.5":
-  version: 1.1.5
-  resolution: "effectual@npm:1.1.5"
-  checksum: 10c0/50515ff46ac23ed5af075b44555bda9e1560f67484be5958f7f8e001cd0ff5d1b244078cf023c8fcd952a6620a978ff7babe9685a20542698e775b71c3536b8f
+"effectual@portal:/Users/zacharywade/Documents/projects/effectual::locator=thamui%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "effectual@portal:/Users/zacharywade/Documents/projects/effectual::locator=thamui%40workspace%3A."
   languageName: node
-  linkType: hard
+  linkType: soft
 
 "emoji-regex@npm:^8.0.0":
   version: 8.0.0
@@ -3348,6 +3347,8 @@ __metadata:
     ssh2: "npm:^1.16.0"
     typescript: "npm:^5.8.3"
     yoga-layout: "npm:^3.2.1"
+  peerDependencies:
+    effectual: ^1.1.5
   languageName: unknown
   linkType: soft
 

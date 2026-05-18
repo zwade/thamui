@@ -1,3 +1,6 @@
 server_id_rsa
 dist
 node_modules
+.yarn/*
+!.yarn/plugins
+!.yarn/releases
