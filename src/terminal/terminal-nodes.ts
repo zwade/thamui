@@ -185,6 +185,10 @@ export class YogaBase {
     }
 }
 
+export type OverflowMode = "visible" | "hidden" | "scroll";
+
+export const SCROLLBAR_ACTIVE_MS = 700;
+
 export class TerminalContent extends YogaBase implements Drawable {
     public tagName: string;
     public style: StyleMap;
@@ -194,6 +198,11 @@ export class TerminalContent extends YogaBase implements Drawable {
     public parent: TerminalContent | null = null;
     public treeContext: TreeContext | null = null;
     public isSelectable: boolean = false;
+
+    public scrollTop: number = 0;
+    public scrollLeft: number = 0;
+    public scrollActivityUntil: number = 0;
+    #scrollFadeTimer: NodeJS.Timeout | null = null;
 
     protected dirty: boolean = true;
     protected events: Map<string, Set<(data?: any) => void>> = new Map();
@@ -446,20 +455,106 @@ export class TerminalContent extends YogaBase implements Drawable {
         return { handled: false };
     }
 
+    public get overflowMode(): OverflowMode {
+        const value = this.computedStyles["overflow"];
+        if (value === "scroll" || value === "hidden") {
+            return value;
+        }
+        return "visible";
+    }
+
+    public getScrollExtent(): { maxScrollX: number; maxScrollY: number } {
+        const { contentArea, border, padding } = this.computedPosition;
+        const originX = border.left + padding.left;
+        const originY = border.top + padding.top;
+
+        let maxX = 0;
+        let maxY = 0;
+        for (const child of this.children) {
+            const pos = child.computedPosition.position;
+            const relRight = pos.x + pos.width - originX;
+            const relBottom = pos.y + pos.height - originY;
+            if (relRight > maxX) maxX = relRight;
+            if (relBottom > maxY) maxY = relBottom;
+        }
+        return {
+            maxScrollX: Math.max(0, Math.ceil(maxX - contentArea.width)),
+            maxScrollY: Math.max(0, Math.ceil(maxY - contentArea.height)),
+        };
+    }
+
+    public dispatchWheel(deltaX: number, deltaY: number): { handled: boolean } {
+        if (this.overflowMode !== "scroll") {
+            return { handled: false };
+        }
+
+        const { maxScrollX, maxScrollY } = this.getScrollExtent();
+        const newTop = Math.max(0, Math.min(maxScrollY, this.scrollTop + deltaY));
+        const newLeft = Math.max(0, Math.min(maxScrollX, this.scrollLeft + deltaX));
+
+        const movedY = newTop !== this.scrollTop;
+        const movedX = newLeft !== this.scrollLeft;
+
+        if (!movedX && !movedY) {
+            return { handled: false };
+        }
+
+        this.scrollTop = newTop;
+        this.scrollLeft = newLeft;
+        this.scrollActivityUntil = Date.now() + SCROLLBAR_ACTIVE_MS;
+        this.markRenderDirty();
+
+        if (this.#scrollFadeTimer) {
+            clearTimeout(this.#scrollFadeTimer);
+        }
+        this.#scrollFadeTimer = setTimeout(() => {
+            this.#scrollFadeTimer = null;
+            this.markRenderDirty();
+            const eff = (globalThis as unknown as { __effectual__?: { isDirty: boolean } }).__effectual__;
+            if (eff) eff.isDirty = true;
+        }, SCROLLBAR_ACTIVE_MS + 50);
+
+        return { handled: true };
+    }
+
     public probe(position: Point) {
         const results: TerminalNode[] = [];
+
+        let childPos = position;
+        if (this.overflowMode !== "visible") {
+            const contentArea = this.computedPosition.contentArea;
+            const border = this.computedPosition.border;
+            const padding = this.computedPosition.padding;
+            const localContentX = border.left + padding.left;
+            const localContentY = border.top + padding.top;
+
+            if (
+                position.x < localContentX ||
+                position.x >= localContentX + contentArea.width ||
+                position.y < localContentY ||
+                position.y >= localContentY + contentArea.height
+            ) {
+                return results;
+            }
+
+            childPos = {
+                x: position.x + this.scrollLeft,
+                y: position.y + this.scrollTop,
+            };
+        }
+
         for (const child of this.children) {
             const childPosition = child.computedPosition.position;
 
             if (
-                position.x >= childPosition.x &&
-                position.x < childPosition.x + childPosition.width &&
-                position.y >= childPosition.y &&
-                position.y < childPosition.y + childPosition.height
+                childPos.x >= childPosition.x &&
+                childPos.x < childPosition.x + childPosition.width &&
+                childPos.y >= childPosition.y &&
+                childPos.y < childPosition.y + childPosition.height
             ) {
                 const offsetPosition = {
-                    x: position.x - childPosition.x,
-                    y: position.y - childPosition.y,
+                    x: childPos.x - childPosition.x,
+                    y: childPos.y - childPosition.y,
                 };
 
                 results.push(child, ...child.probe(offsetPosition));
@@ -622,6 +717,7 @@ export class TerminalText extends YogaBase implements Drawable {
 
     #textContent: string | null;
     #renderDirty: boolean = true;
+    #layoutDirty: boolean = true;
     #cachedMatrix: RleMatrix | null = null;
 
     public get textContent(): string | null {
@@ -639,6 +735,7 @@ export class TerminalText extends YogaBase implements Drawable {
 
     #markDirty() {
         this.#renderDirty = true;
+        this.#layoutDirty = true;
         this.parent?.markRenderDirty();
     }
 
@@ -720,6 +817,13 @@ export class TerminalText extends YogaBase implements Drawable {
     }
 
     public layout(): void {
+        if (this.#layoutDirty) {
+            const yogaNode = this.allocateYoga();
+            yogaNode.markDirty();
+
+            this.#layoutDirty = false;
+        }
+
         this.recomputeLayout();
     }
 

@@ -95,6 +95,24 @@ export class Segment {
         return size + extra;
     }
 
+    public dropSuffix(size: number) {
+        const toDrop = Math.ceil(size / this.width);
+        const extra = size % this.width;
+
+        if (toDrop >= this.size) {
+            const dropped = this.size;
+            this.data = "";
+            return dropped;
+        }
+
+        this.data = this.data.slice(0, -toDrop * this.characterWidth);
+        return size + extra;
+    }
+
+    public clone() {
+        return new Segment(this.width, this.data, this.options);
+    }
+
     public toSplit(index: number) {
         const start = Math.floor(index / this.width);
 
@@ -335,14 +353,41 @@ export class RleBuffer {
     }
 
     public copyIn(index: number, other: RleBuffer) {
+        this.copyInClipped(index, other, 0, this.length);
+    }
+
+    public copyInClipped(index: number, other: RleBuffer, clipStart: number, clipEnd: number) {
+        const effectiveStart = Math.max(clipStart, 0);
+        const effectiveEnd = Math.min(clipEnd, this.length);
+        if (effectiveStart >= effectiveEnd) return;
+
         let runningIndex = index;
+
         for (let i = 0; i < other.segments.length; i++) {
-            if (runningIndex + other.segments[i].size > this.length) {
-                break;
+            const original = other.segments[i];
+            const segStart = runningIndex;
+            const segEnd = runningIndex + original.size;
+            runningIndex = segEnd;
+
+            if (segEnd <= effectiveStart) continue;
+            if (segStart >= effectiveEnd) break;
+
+            const dropFromStart = Math.max(0, effectiveStart - segStart);
+            const dropFromEnd = Math.max(0, segEnd - effectiveEnd);
+
+            let segment: Segment;
+            if (dropFromStart > 0 || dropFromEnd > 0) {
+                segment = original.clone();
+                if (dropFromStart > 0) segment.dropPrefix(dropFromStart);
+                if (dropFromEnd > 0) segment.dropSuffix(dropFromEnd);
+            } else {
+                segment = original;
             }
 
-            this.write(runningIndex, other.segments[i]);
-            runningIndex += other.segments[i].size;
+            if (segment.size === 0) continue;
+
+            const writeStart = Math.max(segStart, effectiveStart);
+            this.write(writeStart, segment);
         }
     }
 
@@ -432,12 +477,22 @@ export class RleMatrix {
     }
 
     public copyIn(start: Point, other: RleMatrix) {
-        for (let i = 0; i < other.height; i++) {
-            if (start.y + i >= this.data.length) {
-                break;
-            }
+        this.copyInClipped(start, other, { x: 0, y: 0, width: this.width, height: this.height });
+    }
 
-            this.data[start.y + i].copyIn(start.x, other.data[i]);
+    public copyInClipped(
+        start: Point,
+        other: RleMatrix,
+        clip: { x: number; y: number; width: number; height: number },
+    ) {
+        const clipMaxX = clip.x + clip.width;
+        const clipMaxY = clip.y + clip.height;
+
+        const minI = Math.max(0, clip.y - start.y, -start.y);
+        const maxI = Math.min(other.height, clipMaxY - start.y, this.data.length - start.y);
+
+        for (let i = minI; i < maxI; i++) {
+            this.data[start.y + i].copyInClipped(start.x, other.data[i], clip.x, clipMaxX);
         }
     }
 

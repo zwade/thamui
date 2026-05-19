@@ -1,6 +1,6 @@
 {
   "name": "thamui",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -34,7 +34,7 @@
     "@types/ssh2": "^1.15.5",
     "@typescript-eslint/eslint-plugin": "^7.3.1",
     "@typescript-eslint/parser": "^7.3.1",
-    "effectual": "^1.1.5",
+    "effectual": "^1.1.8",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",

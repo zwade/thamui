@@ -9,6 +9,7 @@ import {
     Gutter,
     Justify,
     Node as YogaNode,
+    Overflow,
     PositionType,
     Wrap,
 } from "yoga-layout";
@@ -210,6 +211,16 @@ export const flexWrap = (val: string | undefined): Wrap => {
     );
 };
 
+export const overflow = (val: string | undefined): Overflow => {
+    return (
+        {
+            visible: Overflow.Visible,
+            hidden: Overflow.Hidden,
+            scroll: Overflow.Scroll,
+        }[val || ""] ?? Overflow.Visible
+    );
+};
+
 export const positionType = (val: string | undefined) => {
     return (
         {
@@ -308,6 +319,7 @@ export const applyStyles = (node: YogaNode, styles: StyleRecord) => {
     node.setAlignItems(alignItems(styles["alignItems"]));
 
     node.setPositionType(positionType(styles["position"]));
+    node.setOverflow(overflow(styles["overflow"]));
 
     const alignSelf = styles["alignSelf"];
     if (alignSelf) {

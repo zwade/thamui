@@ -1,4 +1,5 @@
 import type { TerminalContent, TerminalNode } from "./terminal-nodes.js";
+import { Point } from "./utils.js";
 
 export interface KeyEvent {
     key: string;
@@ -9,6 +10,8 @@ export interface KeyEvent {
 }
 
 export type MouseEventName = "mousemove" | "mousedown" | "mouseup";
+
+const SCROLL_STEP = 3;
 
 const PASTE_START = Buffer.from("\x1b[200~");
 const PASTE_END = Buffer.from("\x1b[201~");
@@ -99,6 +102,7 @@ export class TreeContext {
 
     #hadMouseEntry: Set<TerminalNode> = new Set();
     #pasteBuffer: Buffer[] | null = null;
+    #lastCursor: Point | null = null;
 
     public constructor(root: TerminalContent) {
         this.root = root;
@@ -260,6 +264,7 @@ export class TreeContext {
 
         const xPos = sequence[4] - 0x21;
         const yPos = sequence[5] - 0x21 - this.offsetY;
+        this.#lastCursor = { x: xPos, y: yPos };
         return this.#dispatchMouseAt(eventName, xPos, yPos);
     }
 
@@ -290,16 +295,53 @@ export class TreeContext {
             return { handled: false, dirty: false };
         }
 
+        this.#lastCursor = { x: xPos, y: yPos };
+
+        if ((button & 0x40) !== 0 && final === 0x4d) {
+            // Wheel event. 64 = up, 65 = down, 66 = left, 67 = right.
+            const horizontal = (button & 0x02) !== 0;
+            const negative = (button & 0x01) === 0;
+            const delta = (negative ? -1 : 1) * SCROLL_STEP;
+            const deltaX = horizontal ? delta : 0;
+            const deltaY = horizontal ? 0 : delta;
+            return this.#dispatchWheelAt(xPos, yPos, deltaX, deltaY);
+        }
+
         let eventName: MouseEventName;
         if (final === 0x6d) {
             eventName = "mouseup";
-        } else if (button >= 32) {
+        } else if ((button & 0x20) !== 0) {
             eventName = "mousemove";
         } else {
             eventName = "mousedown";
         }
 
         return this.#dispatchMouseAt(eventName, xPos, yPos);
+    }
+
+    #dispatchWheelAt(
+        xPos: number,
+        yPos: number,
+        deltaX: number,
+        deltaY: number,
+    ): { handled: boolean; dirty: boolean } {
+        const targets = this.root.probe({ x: xPos, y: yPos });
+
+        let handled = false;
+
+        // dispatchWheel returns handled=false if the node is at the requested edge,
+        // which lets the wheel bubble naturally to the next outer scrollable.
+        for (const target of [...targets].reverse()) {
+            if (!("dispatchWheel" in target)) continue;
+            const content = target as TerminalContent;
+            const result = content.dispatchWheel(deltaX, deltaY);
+            if (result.handled) {
+                handled = true;
+                break;
+            }
+        }
+
+        return { handled, dirty: handled };
     }
 
     #dispatchMouseAt(eventName: MouseEventName, xPos: number, yPos: number): { handled: boolean; dirty: boolean } {
