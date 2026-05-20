@@ -100,7 +100,7 @@ export class TreeContext {
     public root: TerminalContent;
     public offsetY: number = 0;
 
-    #hadMouseEntry: Set<TerminalNode> = new Set();
+    #hadMouseEntry: Set<TerminalContent> = new Set();
     #pasteBuffer: Buffer[] | null = null;
     #lastCursor: Point | null = null;
     #requestedRedraw: boolean = false;
@@ -364,7 +364,7 @@ export class TreeContext {
 
         let hoverChanged = false;
         if (eventName === "mousemove") {
-            const newMoveTargets = new Set<TerminalNode>(targets);
+            const newMoveTargets = new Set<TerminalContent>(targets);
             for (const target of this.#hadMouseEntry) {
                 if (!newMoveTargets.has(target)) {
                     target.dispatchEvent("mouseleave");

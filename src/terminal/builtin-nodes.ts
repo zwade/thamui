@@ -27,7 +27,7 @@ export class Block extends TerminalContent {
 
         const mode = this.overflowMode;
         if (mode === "visible") {
-            for (const child of this.children) {
+            for (const child of this.drawableChildren) {
                 const childPos = child.computedPosition.position;
                 composite.copyIn({ x: childPos.x, y: childPos.y }, child.render());
             }
@@ -43,7 +43,7 @@ export class Block extends TerminalContent {
             const sx = mode === "scroll" ? this.scrollLeft : 0;
             const sy = mode === "scroll" ? this.scrollTop : 0;
 
-            for (const child of this.children) {
+            for (const child of this.drawableChildren) {
                 const childPos = child.computedPosition.position;
                 composite.copyInClipped({ x: childPos.x - sx, y: childPos.y - sy }, child.render(), clip);
             }
