@@ -319,12 +319,7 @@ export class TreeContext {
         return this.#dispatchMouseAt(eventName, xPos, yPos);
     }
 
-    #dispatchWheelAt(
-        xPos: number,
-        yPos: number,
-        deltaX: number,
-        deltaY: number,
-    ): { handled: boolean; dirty: boolean } {
+    #dispatchWheelAt(xPos: number, yPos: number, deltaX: number, deltaY: number): { handled: boolean; dirty: boolean } {
         const targets = this.root.probe({ x: xPos, y: yPos });
 
         let handled = false;

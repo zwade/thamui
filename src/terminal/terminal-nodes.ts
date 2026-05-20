@@ -642,6 +642,16 @@ export class TerminalContent extends YogaBase implements Drawable {
         }
     }
 
+    // Emulating HTML properties
+
+    public focus() {
+        this.treeContext?.claim(this);
+    }
+
+    public blur() {
+        this.treeContext?.blur(this);
+    }
+
     // Implemented by inheriting classes
 
     public render(): RleMatrix {

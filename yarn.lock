@@ -1029,10 +1029,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"effectual@npm:^1.1.8":
-  version: 1.1.8
-  resolution: "effectual@npm:1.1.8"
-  checksum: 10c0/1fbd845105da36026a4cae52668829088840f40f1f769f1d67a52c25aa760fc3e9a9c1fa035a81a6bceeaf894580e34b733b86f4a6e859eebe311ec02ff74226
+"effectual@npm:^1.1.9":
+  version: 1.1.9
+  resolution: "effectual@npm:1.1.9"
+  checksum: 10c0/7cd9dc75324f10a023e9fd0664fe98e827b718b90076da07f2974e5855689d2e5f62dbee87454fea079b5d7aa725051a3c7855d59299f296fc5c165dd202d7ad
   languageName: node
   linkType: hard
 
@@ -3337,7 +3337,7 @@ __metadata:
     "@typescript-eslint/parser": "npm:^7.3.1"
     chalk: "npm:^5.4.1"
     css: "npm:^3.0.0"
-    effectual: "npm:^1.1.8"
+    effectual: "npm:^1.1.9"
     eslint: "npm:^8.57.0"
     eslint-config-prettier: "npm:^9.1.0"
     eslint-plugin-prettier: "npm:^5.1.3"
