@@ -114,7 +114,9 @@ const buildReconciliationLoop = (App: () => EffectualElement, options: Reconcili
             if (stopped) return;
 
             try {
-                if (!forceReflow && lastPass && !globalThis.__effectual__.isDirty) {
+                const treeRequestedRedraw = treeContext.consumeRedrawRequest();
+
+                if (!forceReflow && lastPass && !globalThis.__effectual__.isDirty && !treeRequestedRedraw) {
                     return;
                 }
 

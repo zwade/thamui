@@ -62,7 +62,9 @@ export class Block extends TerminalContent {
         clip: { x: number; y: number; width: number; height: number },
         generalStyles: AnsiStyles,
     ): void {
-        const { maxScrollX, maxScrollY } = this.getScrollExtent();
+        const scrollExtent = this.computedPosition.scrollExtent;
+        const maxScrollX = scrollExtent.width;
+        const maxScrollY = scrollExtent.height;
 
         if (maxScrollY > 0 && clip.width > 0 && clip.height >= 2) {
             const contentLen = clip.height + maxScrollY;

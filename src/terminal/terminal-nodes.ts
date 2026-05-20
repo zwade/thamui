@@ -85,12 +85,15 @@ export interface ComputedPosition {
     margin: FourSize;
     padding: FourSize;
     contentArea: Box;
+    scrollExtent: Box;
 }
 
 export class YogaBase {
     #yogaNode: YogaNode | null = null;
     #computedPosition: ComputedPosition | null = null;
     #measureFunc?: MeasureFunction;
+
+    protected children: YogaBase[] = [];
 
     protected set measureFunc(func: MeasureFunction) {
         this.#measureFunc = func;
@@ -168,12 +171,33 @@ export class YogaBase {
             height: position.height - (border.top + border.bottom) - (padding.top + padding.bottom),
         };
 
+        const originX = border.left + padding.left;
+        const originY = border.top + padding.top;
+
+        let maxX = 0;
+        let maxY = 0;
+        for (const child of this.children) {
+            const pos = child.computedPosition.position;
+            const relRight = pos.x + pos.width - originX;
+            const relBottom = pos.y + pos.height - originY;
+            if (relRight > maxX) maxX = relRight;
+            if (relBottom > maxY) maxY = relBottom;
+        }
+
+        const scrollExtent: Box = {
+            x: 0,
+            y: 0,
+            width: Math.max(0, Math.ceil(maxX - contentArea.width)),
+            height: Math.max(0, Math.ceil(maxY - contentArea.height)),
+        };
+
         const computedPosition = {
             position,
             border,
             margin,
             padding,
             contentArea,
+            scrollExtent,
         };
 
         this.#computedPosition = computedPosition;
@@ -190,6 +214,8 @@ export type OverflowMode = "visible" | "hidden" | "scroll";
 export const SCROLLBAR_ACTIVE_MS = 700;
 
 export class TerminalContent extends YogaBase implements Drawable {
+    public kind = "terminal" as const;
+
     public tagName: string;
     public style: StyleMap;
 
@@ -199,8 +225,6 @@ export class TerminalContent extends YogaBase implements Drawable {
     public treeContext: TreeContext | null = null;
     public isSelectable: boolean = false;
 
-    public scrollTop: number = 0;
-    public scrollLeft: number = 0;
     public scrollActivityUntil: number = 0;
     #scrollFadeTimer: NodeJS.Timeout | null = null;
 
@@ -213,6 +237,8 @@ export class TerminalContent extends YogaBase implements Drawable {
     protected rawStylesheet: ParsedStyle[] | null = null;
     protected states: Set<Selector.State> = new Set();
 
+    #scrollTop: number = 0;
+    #scrollLeft: number = 0;
     #layoutDirty: boolean = true;
     #stylesDirty: boolean = true;
     #renderDirty: boolean = true;
@@ -463,24 +489,35 @@ export class TerminalContent extends YogaBase implements Drawable {
         return "visible";
     }
 
-    public getScrollExtent(): { maxScrollX: number; maxScrollY: number } {
-        const { contentArea, border, padding } = this.computedPosition;
-        const originX = border.left + padding.left;
-        const originY = border.top + padding.top;
+    public scrollTo(x: number, y: number) {
+        const scrollExtent = this.computedPosition.scrollExtent;
 
-        let maxX = 0;
-        let maxY = 0;
-        for (const child of this.children) {
-            const pos = child.computedPosition.position;
-            const relRight = pos.x + pos.width - originX;
-            const relBottom = pos.y + pos.height - originY;
-            if (relRight > maxX) maxX = relRight;
-            if (relBottom > maxY) maxY = relBottom;
+        const newTop = Math.max(0, Math.min(scrollExtent.height, y));
+        const newLeft = Math.max(0, Math.min(scrollExtent.width, x));
+
+        const movedY = newTop !== this.#scrollTop;
+        const movedX = newLeft !== this.#scrollLeft;
+
+        if (!movedX && !movedY) {
+            return { handled: false };
         }
-        return {
-            maxScrollX: Math.max(0, Math.ceil(maxX - contentArea.width)),
-            maxScrollY: Math.max(0, Math.ceil(maxY - contentArea.height)),
-        };
+
+        this.#scrollTop = newTop;
+        this.#scrollLeft = newLeft;
+        this.scrollActivityUntil = Date.now() + SCROLLBAR_ACTIVE_MS;
+        this.markRenderDirty();
+
+        if (this.#scrollFadeTimer) {
+            clearTimeout(this.#scrollFadeTimer);
+        }
+
+        this.#scrollFadeTimer = setTimeout(() => {
+            this.#scrollFadeTimer = null;
+            this.markRenderDirty();
+            this.treeContext?.requestRedraw();
+        }, SCROLLBAR_ACTIVE_MS + 50);
+
+        return { handled: true };
     }
 
     public dispatchWheel(deltaX: number, deltaY: number): { handled: boolean } {
@@ -488,33 +525,7 @@ export class TerminalContent extends YogaBase implements Drawable {
             return { handled: false };
         }
 
-        const { maxScrollX, maxScrollY } = this.getScrollExtent();
-        const newTop = Math.max(0, Math.min(maxScrollY, this.scrollTop + deltaY));
-        const newLeft = Math.max(0, Math.min(maxScrollX, this.scrollLeft + deltaX));
-
-        const movedY = newTop !== this.scrollTop;
-        const movedX = newLeft !== this.scrollLeft;
-
-        if (!movedX && !movedY) {
-            return { handled: false };
-        }
-
-        this.scrollTop = newTop;
-        this.scrollLeft = newLeft;
-        this.scrollActivityUntil = Date.now() + SCROLLBAR_ACTIVE_MS;
-        this.markRenderDirty();
-
-        if (this.#scrollFadeTimer) {
-            clearTimeout(this.#scrollFadeTimer);
-        }
-        this.#scrollFadeTimer = setTimeout(() => {
-            this.#scrollFadeTimer = null;
-            this.markRenderDirty();
-            const eff = (globalThis as unknown as { __effectual__?: { isDirty: boolean } }).__effectual__;
-            if (eff) eff.isDirty = true;
-        }, SCROLLBAR_ACTIVE_MS + 50);
-
-        return { handled: true };
+        return this.scrollTo(this.#scrollLeft + deltaX, this.#scrollTop + deltaY);
     }
 
     public probe(position: Point) {
@@ -538,8 +549,8 @@ export class TerminalContent extends YogaBase implements Drawable {
             }
 
             childPos = {
-                x: position.x + this.scrollLeft,
-                y: position.y + this.scrollTop,
+                x: position.x + this.#scrollLeft,
+                y: position.y + this.#scrollTop,
             };
         }
 
@@ -652,6 +663,30 @@ export class TerminalContent extends YogaBase implements Drawable {
         this.treeContext?.blur(this);
     }
 
+    public set scrollTop(value: number) {
+        this.scrollTo(this.#scrollLeft, value);
+    }
+
+    public get scrollTop(): number {
+        return this.#scrollTop;
+    }
+
+    public set scrollLeft(value: number) {
+        this.scrollTo(value, this.#scrollTop);
+    }
+
+    public get scrollLeft(): number {
+        return this.#scrollLeft;
+    }
+
+    public get scrollHeight(): number {
+        return this.computedPosition.scrollExtent.height;
+    }
+
+    public get scrollWidth(): number {
+        return this.computedPosition.scrollExtent.width;
+    }
+
     // Implemented by inheriting classes
 
     public render(): RleMatrix {
@@ -719,6 +754,8 @@ const wrapWords = (text: string, width: number | null): string[] => {
 };
 
 export class TerminalText extends YogaBase implements Drawable {
+    public kind = "text" as const;
+
     public nextSibling: TerminalNode | null = null;
     public parent: TerminalContent | null = null;
     public treeContext: TreeContext | null = null;

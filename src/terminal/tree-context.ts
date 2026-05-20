@@ -103,6 +103,7 @@ export class TreeContext {
     #hadMouseEntry: Set<TerminalNode> = new Set();
     #pasteBuffer: Buffer[] | null = null;
     #lastCursor: Point | null = null;
+    #requestedRedraw: boolean = false;
 
     public constructor(root: TerminalContent) {
         this.root = root;
@@ -172,8 +173,18 @@ export class TreeContext {
         return { handled: false, dirty: false };
     }
 
+    public requestRedraw() {
+        this.#requestedRedraw = true;
+    }
+
+    public consumeRedrawRequest(): boolean {
+        const requested = this.#requestedRedraw;
+        this.#requestedRedraw = false;
+        return requested;
+    }
+
     #collectSelectable(node: TerminalNode, out: TerminalContent[]) {
-        if (!("children" in node)) {
+        if (node.kind !== "terminal") {
             return;
         }
 
