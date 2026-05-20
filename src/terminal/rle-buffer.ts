@@ -9,6 +9,7 @@ export interface AnsiStyles {
     strikethrough?: boolean;
     underline?: boolean;
     bold?: boolean;
+    italic?: boolean;
 }
 
 export interface SegmentOptions extends AnsiStyles {
@@ -46,6 +47,10 @@ const render = (styles: AnsiStyles, data: string) => {
 
     if (styles.bold) {
         c = c.bold;
+    }
+
+    if (styles.italic) {
+        c = c.italic;
     }
 
     return c(data);
@@ -502,6 +507,10 @@ export class RleMatrix {
             color: options.color ?? this.options.color,
             bgColor: options.bgColor ?? this.options.bgColor,
             empty: options.empty ?? this.options.empty,
+            bold: options.bold ?? this.options.bold,
+            underline: options.underline ?? this.options.underline,
+            strikethrough: options.strikethrough ?? this.options.strikethrough,
+            italic: options.italic ?? this.options.italic,
         };
 
         const matrix = RleMatrix.fromAscii(data, mergedOptions);
@@ -516,9 +525,10 @@ export class RleMatrix {
         const mergedOptions: SegmentOptions = {
             color: options.color ?? this.options.color,
             bgColor: options.bgColor ?? this.options.bgColor,
-            bold: options.bold,
-            underline: options.underline,
-            strikethrough: options.strikethrough,
+            bold: options.bold ?? this.options.bold,
+            underline: options.underline ?? this.options.underline,
+            strikethrough: options.strikethrough ?? this.options.strikethrough,
+            italic: options.italic ?? this.options.italic,
         };
 
         const row = this.data[start.y];

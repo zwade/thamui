@@ -18,9 +18,6 @@ export interface Drawable {
     pushStyles(styleData: Styles.LocalStyleData, parentContext: Selector.ParentContext): void;
 
     probe(position: Point): TerminalNode[];
-    dispatchEvent(eventName: string): {
-        handled: boolean;
-    };
 }
 
 export interface ComputedPosition {

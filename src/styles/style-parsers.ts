@@ -14,6 +14,8 @@ import {
     Wrap,
 } from "yoga-layout";
 
+import { AnsiStyles } from "../terminal/rle-buffer.js";
+
 export type StyleRecord = Record<string, string>;
 export type Style = string;
 
@@ -125,6 +127,47 @@ const colorOpacity = (val: string | undefined) => {
     if (val?.startsWith("#") && val.length === 9) {
         return parseInt(val.slice(7, 9), 16) / 255;
     }
+};
+
+const textDecoration = (val: string | undefined): "none" | "underline" | "line-through" => {
+    if (val === "underline") {
+        return "underline";
+    }
+
+    if (val === "line-through") {
+        return "line-through";
+    }
+
+    return "none";
+};
+
+const fontWeight = (val: string | undefined): "normal" | "bold" => {
+    if (val === "normal") {
+        return "normal";
+    }
+
+    if (val === "bold") {
+        return "bold";
+    }
+
+    const numVal = parseInt(val || "");
+    if (isNaN(numVal)) {
+        return "normal";
+    }
+
+    if (numVal >= 700) {
+        return "bold";
+    }
+
+    return "normal";
+};
+
+const fontStyle = (val: string | undefined): "normal" | "italic" => {
+    if (val === "italic") {
+        return "italic";
+    }
+
+    return "normal";
 };
 
 function fourSize(val: string | undefined): FourOf<number> | undefined;
@@ -329,4 +372,19 @@ export const applyStyles = (node: YogaNode, styles: StyleRecord) => {
     node.setGap(Gutter.All, measureWithPercent(styles["gap"]));
 
     return styles;
+};
+
+export const getAnsiStyles = (styles: StyleRecord): AnsiStyles => {
+    const decoration = textDecoration(styles["textDecoration"]);
+    const weight = fontWeight(styles["fontWeight"]);
+    const style = fontStyle(styles["fontStyle"]);
+
+    return {
+        color: styles["color"],
+        bgColor: styles["backgroundColor"],
+        bold: weight === "bold",
+        strikethrough: decoration === "line-through",
+        underline: decoration === "underline",
+        italic: style === "italic",
+    };
 };

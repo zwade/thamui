@@ -91,6 +91,13 @@ export class TerminalContent extends YogaBase implements Drawable {
     public treeContext: TreeContext | null = null;
     public isSelectable: boolean = false;
 
+    /**
+     * Set when this element is `display: inline`: it is then laid out and
+     * painted by an ancestor's `InlineRun` rather than by a box of its own.
+     * The pointer lets style/state changes invalidate that run.
+     */
+    public inlineOwner: InlineRun | null = null;
+
     public scrollActivityUntil: number = 0;
     #scrollFadeTimer: NodeJS.Timeout | null = null;
 
@@ -108,6 +115,7 @@ export class TerminalContent extends YogaBase implements Drawable {
     // children change.
     #drawableChildren: DrawableChild[] = [];
     #drawableChildrenDirty: boolean = true;
+    #lastDisplayMode: "block" | "inline" | undefined = undefined;
 
     #scrollTop: number = 0;
     #scrollLeft: number = 0;
@@ -156,6 +164,14 @@ export class TerminalContent extends YogaBase implements Drawable {
     }
 
     /**
+     * `block` (the default) or `inline`. An inline element joins an ancestor's
+     * inline run instead of producing its own layout box.
+     */
+    public get displayMode(): "block" | "inline" {
+        return this.computedStyles["display"] === "inline" ? "inline" : "block";
+    }
+
+    /**
      * The drawable children, rebuilt on demand if the DOM children changed
      * since the last access.
      */
@@ -178,6 +194,10 @@ export class TerminalContent extends YogaBase implements Drawable {
         this.#stylesDirty = true;
         this.markRenderDirty();
 
+        // If we are an inline element, any mutation (children, attributes,
+        // pseudo-state) changes what the owning run paints, so re-flatten it.
+        this.inlineOwner?.invalidate();
+
         if (!this.#recomputeTimer) {
             this.#recomputeTimer = setTimeout(() => this.recomputeStyles(), 1);
         }
@@ -190,6 +210,15 @@ export class TerminalContent extends YogaBase implements Drawable {
 
         this.#renderDirty = true;
         this.parent?.markRenderDirty();
+    }
+
+    /**
+     * Force `drawableChildren` to be regrouped on next access. Used when a
+     * child's `display` changes, which can move it into or out of a run.
+     */
+    public markDrawableChildrenDirty(): void {
+        this.#drawableChildrenDirty = true;
+        this.markRenderDirty();
     }
 
     protected get cachedComposite(): RleMatrix | null {
@@ -233,23 +262,28 @@ export class TerminalContent extends YogaBase implements Drawable {
 
         for (const previous of this.#drawableChildren) {
             if (previous.kind === "inline-run") {
+                previous.detachOwners();
                 previous.deallocateYoga();
             }
         }
 
         const next: DrawableChild[] = [];
-        let pendingText: TerminalText[] = [];
+        let pendingInline: TerminalNode[] = [];
 
         const flushRun = () => {
-            if (pendingText.length > 0) {
-                next.push(new InlineRun(this, pendingText));
-                pendingText = [];
+            if (pendingInline.length > 0) {
+                next.push(new InlineRun(this, pendingInline));
+                pendingInline = [];
             }
         };
 
+        // Text nodes and `display: inline` elements are inline-level: maximal
+        // adjacent runs of them collapse into one `InlineRun`. Block elements
+        // break the run and stand on their own.
         for (const child of this.children) {
-            if (child.kind === "text") {
-                pendingText.push(child);
+            const isInlineLevel = child.kind === "text" || child.displayMode === "inline";
+            if (isInlineLevel) {
+                pendingInline.push(child);
             } else {
                 flushRun();
                 next.push(child);
@@ -332,6 +366,7 @@ export class TerminalContent extends YogaBase implements Drawable {
 
         this.treeContext = null;
         this.parent = null;
+        this.inlineOwner = null;
     }
 
     public setFocused(value: boolean) {
@@ -472,8 +507,8 @@ export class TerminalContent extends YogaBase implements Drawable {
     }
 
     public probe(position: Point): TerminalContent[] {
-        // Only element nodes are hit-tested; inline runs (and therefore text)
-        // are skipped, so this never yields a `TerminalText`.
+        // Yields only element nodes — block children directly, and the inline
+        // elements an `InlineRun` reports under the point. Never a `TerminalText`.
         const results: TerminalContent[] = [];
 
         let childPos = position;
@@ -500,11 +535,6 @@ export class TerminalContent extends YogaBase implements Drawable {
         }
 
         for (const child of this.drawableChildren) {
-            // Inline runs carry no interactive content — text is not hit-tested.
-            if (child.kind === "inline-run") {
-                continue;
-            }
-
             const childPosition = child.computedPosition.position;
 
             if (
@@ -518,7 +548,13 @@ export class TerminalContent extends YogaBase implements Drawable {
                     y: childPos.y - childPosition.y,
                 };
 
-                results.push(child, ...child.probe(offsetPosition));
+                if (child.kind === "inline-run") {
+                    // The run maps the cell to the inline element chain (if any)
+                    // covering it; the run itself is not an event target.
+                    results.push(...child.probe(offsetPosition));
+                } else {
+                    results.push(child, ...child.probe(offsetPosition));
+                }
             }
         }
 
@@ -598,20 +634,37 @@ export class TerminalContent extends YogaBase implements Drawable {
             this.#lastParentContextOutOf = this.parentContext.outOf;
             this.#layoutDirty = true;
             this.#renderDirty = true;
+
+            // A change to our `display` can move us into or out of a sibling
+            // run, so the parent must regroup its drawable children.
+            const display = this.displayMode;
+            if (display !== this.#lastDisplayMode) {
+                this.#lastDisplayMode = display;
+                this.parent?.markDrawableChildrenDirty();
+            }
+
+            // If we are an inline element, the run painting us must repaint
+            // with the recomputed style.
+            this.inlineOwner?.invalidate();
         }
 
-        // Propagate to drawable children. Element children get a `:nth-child`
-        // context based on their position among the *DOM* children, so that
-        // collapsing text into runs does not perturb selector matching.
-        let domIndex = 0;
+        // Styles cascade down the DOM tree: every element child — block or
+        // inline — recomputes against our scope. `:nth-child` indices are taken
+        // over the DOM children so collapsing text into runs cannot perturb
+        // selector matching.
         const outOf = this.children.length;
-        for (const drawable of this.drawableChildren) {
-            if (drawable.kind === "inline-run") {
-                drawable.pushStyles(this.localStyles!);
-                domIndex += drawable.nodes.length;
-            } else {
-                drawable.pushStyles(this.localStyles!, { index: domIndex, outOf });
-                domIndex += 1;
+        for (let i = 0; i < this.children.length; i++) {
+            const child = this.children[i];
+            child.pushStyles(this.localStyles!, { index: i, outOf });
+        }
+
+        // Hand our inherited style to our own inline runs. Inline elements are
+        // skipped here — they flatten into an ancestor's run, not one of ours.
+        if (this.displayMode === "block") {
+            for (const drawable of this.drawableChildren) {
+                if (drawable.kind === "inline-run") {
+                    drawable.pushStyles(this.localStyles!);
+                }
             }
         }
     }

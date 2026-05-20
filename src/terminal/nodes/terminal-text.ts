@@ -1,3 +1,5 @@
+import { Selector } from "../../styles/selector.js";
+import { Styles } from "../../styles/styles-runtime.js";
 import type { TreeContext } from "../tree-context.js";
 import type { InlineRun } from "./inline-run.js";
 import type { TerminalContent, TerminalNode } from "./terminal-content.js";
@@ -15,6 +17,8 @@ export class TerminalText {
     public nextSibling: TerminalNode | null = null;
     public parent: TerminalContent | null = null;
     public treeContext: TreeContext | null = null;
+    public rawParentStyles: Styles.LocalStyleData | null = null;
+    public parentContext: Selector.ParentContext | null = null;
 
     /**
      * The inline run that currently lays out and paints this node. Assigned by
@@ -43,6 +47,11 @@ export class TerminalText {
         // The run owns measurement and paint; tell it the collapsed text
         // changed so it re-measures and repaints.
         this.owner?.invalidate();
+    }
+
+    public pushStyles(parentStyles: Styles.LocalStyleData, parentContext: Selector.ParentContext): void {
+        this.rawParentStyles = parentStyles;
+        this.parentContext = parentContext;
     }
 
     public onAttach(ctx: TreeContext, parent: TerminalContent | null) {

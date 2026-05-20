@@ -38,7 +38,16 @@ export class Styles {
         }, a);
     }
 
-    public static inheritedStyles = Set(["fontSize", "fontFamily", "color", "textAlign", "backgroundColor"]);
+    public static inheritedStyles = Set([
+        "fontSize",
+        "fontFamily",
+        "color",
+        "textAlign",
+        "backgroundColor",
+        "textDecoration",
+        "fontWeight",
+        "fontStyle",
+    ]);
 }
 
 export const mergeStyles = (currentStyles: Styles.StyleMap, newDeclarations: ParsedStyle[]) => {

@@ -36,3 +36,27 @@ textarea {
 div {
     flex-shrink: 1;
 }
+
+span,
+b,
+i,
+em,
+strong,
+a {
+    display: inline;
+}
+
+b,
+strong {
+    font-weight: bold;
+    // background-color: red;
+}
+
+i,
+em {
+    font-style: italic;
+}
+
+a {
+    text-decoration: underline;
+}
