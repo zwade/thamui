@@ -2,7 +2,7 @@ import { MeasureMode } from "yoga-layout";
 
 import { getAnsiStyles } from "../../styles/style-parsers.js";
 import { Styles } from "../../styles/styles-runtime.js";
-import { AnsiStyles, RleMatrix } from "../rle-buffer.js";
+import { AnsiStyles, isFullwidth, RleMatrix } from "../rle-buffer.js";
 import { Point } from "../utils.js";
 import { Drawable, YogaBase } from "./drawable.js";
 import type { TerminalContent, TerminalNode } from "./terminal-content.js";
@@ -18,19 +18,57 @@ interface InlinePiece {
     elements: readonly TerminalContent[];
 }
 
-/** A single rendered character cell, tagged with the piece it came from. */
+/**
+ * A single rendered character cell. `ch` is one whole code point (one or two
+ * UTF-16 units); `width` is how many terminal columns it occupies — 2 for
+ * fullwidth CJK / emoji, 1 otherwise. Tracking the visual width here is what
+ * keeps wrapping, measurement and paint in agreement for wide characters.
+ */
 interface Cell {
     ch: string;
+    width: 1 | 2;
     piece: InlinePiece;
 }
 
 const isSpace = (ch: string): boolean => /\s/.test(ch);
 
+/** Total terminal columns occupied by a cell list. */
+const columnsOf = (cells: readonly Cell[]): number => {
+    let total = 0;
+    for (const cell of cells) {
+        total += cell.width;
+    }
+    return total;
+};
+
+/**
+ * Split a cell list at the first point that would exceed `maxColumns`. The head
+ * always contains at least one cell, so callers that loop on the remainder are
+ * guaranteed to make progress even when a single wide cell overflows the width.
+ */
+const splitAtColumns = (cells: Cell[], maxColumns: number): [head: Cell[], rest: Cell[]] => {
+    let columns = 0;
+    let i = 0;
+    while (i < cells.length) {
+        const width = cells[i].width;
+        if (i > 0 && columns + width > maxColumns) {
+            break;
+        }
+        columns += width;
+        i++;
+        if (columns >= maxColumns) {
+            break;
+        }
+    }
+    return [cells.slice(0, i), cells.slice(i)];
+};
+
 /**
  * Break a flat cell stream into wrapped lines no wider than `width` columns.
  * With `width === null` the stream is only broken on explicit newlines (its
- * natural, unwrapped size). Word boundaries are honoured; words longer than
- * `width` are hard-broken.
+ * natural, unwrapped size). Word boundaries are honoured; words wider than
+ * `width` are hard-broken. All widths are measured in terminal columns, so
+ * fullwidth characters count as two.
  */
 const wrapCells = (cells: Cell[], width: number | null): Cell[][] => {
     if (cells.length === 0) {
@@ -79,15 +117,20 @@ const wrapCells = (cells: Cell[], width: number | null): Cell[][] => {
         }
 
         let line: Cell[] = [];
+        let lineColumns = 0;
         for (const tok of tokens) {
-            if (line.length + tok.length <= width) {
+            const tokColumns = columnsOf(tok);
+
+            if (lineColumns + tokColumns <= width) {
                 line = line.concat(tok);
+                lineColumns += tokColumns;
                 continue;
             }
 
             if (line.length > 0) {
                 wrapped.push(line);
                 line = [];
+                lineColumns = 0;
             }
 
             if (isSpace(tok[0].ch)) {
@@ -95,15 +138,18 @@ const wrapCells = (cells: Cell[], width: number | null): Cell[][] => {
                 continue;
             }
 
-            if (tok.length > width) {
+            if (tokColumns > width) {
                 let rest = tok;
-                while (rest.length > width) {
-                    wrapped.push(rest.slice(0, width));
-                    rest = rest.slice(width);
+                while (columnsOf(rest) > width) {
+                    const [head, tail] = splitAtColumns(rest, width);
+                    wrapped.push(head);
+                    rest = tail;
                 }
                 line = rest;
+                lineColumns = columnsOf(rest);
             } else {
                 line = tok;
+                lineColumns = tokColumns;
             }
         }
 
@@ -165,7 +211,7 @@ export class InlineRun extends YogaBase implements Drawable {
 
             const wrapWidth = widthMode === MeasureMode.Undefined ? null : Math.max(1, Math.floor(width));
             const lines = wrapCells(cells, wrapWidth);
-            const maxWidth = lines.reduce((acc, line) => Math.max(acc, line.length), 0);
+            const maxWidth = lines.reduce((acc, line) => Math.max(acc, columnsOf(line)), 0);
             return { width: maxWidth, height: Math.max(1, lines.length) };
         };
     }
@@ -190,8 +236,10 @@ export class InlineRun extends YogaBase implements Drawable {
                 node.owner = this;
                 const piece: InlinePiece = { source: node, elements: elements.slice() };
                 const text = node.textContent ?? "";
-                for (let i = 0; i < text.length; i++) {
-                    cells.push({ ch: text[i], piece });
+                // Iterate by code point so surrogate pairs (emoji) stay intact.
+                for (const ch of text) {
+                    const width = isFullwidth(ch.codePointAt(0)!) ? 2 : 1;
+                    cells.push({ ch, width, piece });
                 }
             } else {
                 // An inline element contributes no box of its own, only its
@@ -289,20 +337,23 @@ export class InlineRun extends YogaBase implements Drawable {
             const line = this.#lines[y];
 
             // Coalesce adjacent cells from the same piece so each same-styled
-            // span is written in a single call.
+            // span is painted in a single call. `x` advances in terminal
+            // columns, so wide characters keep the cursor aligned.
             let x = 0;
-            while (x < line.length) {
-                const piece = line[x].piece;
-                let end = x;
+            let i = 0;
+            while (i < line.length) {
+                const piece = line[i].piece;
                 let text = "";
-                while (end < line.length && line[end].piece === piece) {
-                    text += line[end].ch;
-                    end++;
+                let runColumns = 0;
+                while (i < line.length && line[i].piece === piece) {
+                    text += line[i].ch;
+                    runColumns += line[i].width;
+                    i++;
                 }
 
-                const options = this.#pieceStyle(piece);
-                matrix.setAscii({ x, y }, text, options);
-                x = end;
+                // `setText` (unlike `setAscii`) builds fullwidth-aware segments.
+                matrix.setText({ x, y }, text, this.#pieceStyle(piece));
+                x += runColumns;
             }
         }
 
@@ -313,8 +364,8 @@ export class InlineRun extends YogaBase implements Drawable {
 
     /**
      * Hit-test a point within this run. Returns the chain of inline elements
-     * covering that cell, outermost first — empty if the cell is bare text or
-     * past the end of a line.
+     * covering that column, outermost first — empty if the column is bare text
+     * or past the end of a line.
      */
     public probe(position: Point): TerminalContent[] {
         const line = this.#lines[position.y];
@@ -322,11 +373,15 @@ export class InlineRun extends YogaBase implements Drawable {
             return [];
         }
 
-        const cell = line[position.x];
-        if (!cell) {
-            return [];
+        // Walk the line in columns so a click anywhere on a wide cell hits it.
+        let column = 0;
+        for (const cell of line) {
+            if (position.x >= column && position.x < column + cell.width) {
+                return [...cell.piece.elements];
+            }
+            column += cell.width;
         }
 
-        return [...cell.piece.elements];
+        return [];
     }
 }
