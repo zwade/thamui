@@ -319,6 +319,11 @@ export class TerminalContent extends YogaBase implements Drawable {
             this.children.push(node);
         }
 
+        const insertedAt = this.children.indexOf(node);
+        if (insertedAt > 0) {
+            this.children[insertedAt - 1].nextSibling = node;
+        }
+
         this.#drawableChildrenDirty = true;
         this.markDirty();
 
@@ -336,6 +341,11 @@ export class TerminalContent extends YogaBase implements Drawable {
 
         if (index !== -1) {
             const [result] = this.children.splice(index, 1);
+
+            if (index > 0) {
+                this.children[index - 1].nextSibling = this.children[index] ?? null;
+            }
+
             if (result) {
                 result.nextSibling = null;
                 result.onDetach();
@@ -349,6 +359,12 @@ export class TerminalContent extends YogaBase implements Drawable {
     public onAttach(ctx: TreeContext, parent: TerminalContent | null) {
         this.treeContext = ctx;
         this.parent = parent;
+
+        // Detaching cleared the run-ownership back-pointers on any text
+        // children (see `TerminalText.onDetach`), so a re-attached subtree
+        // must regroup its runs or later text mutations will invalidate
+        // nothing and never repaint.
+        this.markDrawableChildrenDirty();
 
         for (const child of this.children) {
             child.onAttach(ctx, this);

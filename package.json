@@ -1,6 +1,6 @@
 {
   "name": "thamui",
-  "version": "0.2.16",
+  "version": "0.2.18",
   "exports": {
     ".": {
       "import": "./dist/index.js",
